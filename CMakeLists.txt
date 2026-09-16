@@ -30,18 +30,42 @@ function(NoGraphicsAPI_disable_exceptions target)
     endif()
 endfunction()
 
-find_package(Vulkan 1.4.357 REQUIRED)
-message(STATUS "Using Vulkan ${Vulkan_VERSION}: ${Vulkan_LIBRARY}")
-message(STATUS "Using Vulkan headers: ${Vulkan_INCLUDE_DIR}")
-
-add_library(NoGraphicsAPI STATIC
+set(nogfx_headers
     include/NoGraphicsAPI/types.h
     include/NoGraphicsAPI/span.hpp
     include/NoGraphicsAPI/traits.hpp
     include/NoGraphicsAPI/bit.hpp
     include/NoGraphicsAPI/NoGraphicsAPI.hpp
-    src/NoGraphicsAPI.cpp
 )
+
+if(APPLE)
+    # Metal 4 backend on macOS (Apple Silicon)
+    enable_language(OBJCXX)
+    add_library(NoGraphicsAPI STATIC
+        ${nogfx_headers}
+        src/NoGraphicsAPI_metal4.mm
+    )
+    target_link_libraries(NoGraphicsAPI
+        PUBLIC "-framework Metal" "-framework QuartzCore" "-framework Foundation"
+    )
+    set_source_files_properties(src/NoGraphicsAPI_metal4.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc"
+    )
+else()
+    # Vulkan backend on Windows/Linux
+    find_package(Vulkan 1.4.357 REQUIRED)
+    message(STATUS "Using Vulkan ${Vulkan_VERSION}: ${Vulkan_LIBRARY}")
+    message(STATUS "Using Vulkan headers: ${Vulkan_INCLUDE_DIR}")
+    add_library(NoGraphicsAPI STATIC
+        ${nogfx_headers}
+        src/NoGraphicsAPI.cpp
+    )
+    target_link_libraries(NoGraphicsAPI
+        PUBLIC Vulkan::Headers
+        PRIVATE Vulkan::Vulkan
+    )
+endif()
+
 add_library(NoGraphicsAPI::NoGraphicsAPI ALIAS NoGraphicsAPI)
 set_target_properties(NoGraphicsAPI PROPERTIES EXPORT_NAME NoGraphicsAPI)
 
@@ -49,10 +73,6 @@ target_compile_features(NoGraphicsAPI PUBLIC cxx_std_20)
 target_include_directories(NoGraphicsAPI PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-)
-target_link_libraries(NoGraphicsAPI
-    PUBLIC Vulkan::Headers
-    PRIVATE Vulkan::Vulkan
 )
 NoGraphicsAPI_disable_exceptions(NoGraphicsAPI)
 
