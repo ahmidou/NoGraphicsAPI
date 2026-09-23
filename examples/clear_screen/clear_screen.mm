@@ -36,8 +36,9 @@
         return;
     }
 
-    auto* semaphore = gpu::create_timeline_semaphore(device);
-    uint64_t frame_index = 0;
+    gpu::TimelineSemaphore* semaphore = gpu::create_timeline_semaphore(device);
+    gpu::CommandPool* pools[2]{gpu::create_command_pool(device), gpu::create_command_pool(device)};
+    uint64 frame_index = 0;
 
     printf("Device: %s\n", gpu::get_device_caps(device).device_name);
     [self.window makeKeyAndOrderFront:nil];
@@ -49,11 +50,18 @@
         {
             [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.016]];
 
-            auto frame = gpu::acquire(device);
+            // Reuse a pool only once the frame that last used it has completed.
+            if (frame_index >= 2)
+                gpu::wait_timeline({.semaphore = semaphore, .value = frame_index - 1});
+            gpu::CommandPool* pool = pools[frame_index % 2];
+            gpu::reset_command_pool(pool);
+            gpu::CommandBuffer* cmd = gpu::begin_commands(pool);
+            gpu::SwapchainFrame frame = gpu::acquire(cmd);
             if (!frame.render_view)
+            {
+                gpu::end_commands(cmd);
                 continue;
-
-            auto* cmd = gpu::begin_commands(device);
+            }
 
             gpu::ColorAttachment color{};
             color.render_view = frame.render_view;
@@ -66,14 +74,16 @@
 
             gpu::begin_render_pass(cmd, render_desc);
             gpu::end_render_pass(cmd);
+            gpu::end_commands(cmd);
 
             ++frame_index;
-            gpu::TimelinePoint completion{ semaphore, frame_index };
-            gpu::submit_and_present(device, { &cmd, 1 }, completion);
+            gpu::submit_and_present(device, {.commands = {cmd}, .completion = {.semaphore = semaphore, .value = frame_index}});
         }
     }
 
     gpu::wait_idle(device);
+    gpu::destroy_command_pool(pools[0]);
+    gpu::destroy_command_pool(pools[1]);
     gpu::destroy_timeline_semaphore(semaphore);
     gpu::destroy_device(device);
     printf("Clean shutdown after 60 frames.\n");
