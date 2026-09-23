@@ -598,6 +598,9 @@ struct ShaderCode
 {
     Span<const uint32> spirv = {};
     ByteSpan metallib = {};
+    // Compute, task, and mesh stages on Metal: the entry point's [numthreads]. A metallib keeps only the total thread count;
+    // Vulkan reads the full size from SPIR-V and ignores this value.
+    uint32x3 threads_per_threadgroup = {};
 };
 
 struct GraphicsPSODesc
