@@ -25,8 +25,8 @@ int main()
     const Span<uint32> vertex_spirv = read_spirv(NOGRAPHICSAPI_VERTEX_SPV_PATH);
     const Span<uint32> fragment_spirv = read_spirv(NOGRAPHICSAPI_FRAGMENT_SPV_PATH);
     PSO* triangle_pso = create_graphics_pso(device, {
-        .vertex_spirv = vertex_spirv,
-        .fragment_spirv = fragment_spirv,
+        .vertex = {.spirv = vertex_spirv},
+        .fragment = {.spirv = fragment_spirv},
         .color_targets = { { .format = Format::bgra8_srgb } }
     });
     free(fragment_spirv.data);

@@ -440,15 +440,15 @@ static_assert(!default_depth_stencil.depth_test && !default_depth_stencil.depth_
               default_depth_stencil.stencil_write_mask == 0xff);
 
 constexpr gpu::GraphicsPSODesc default_graphics_pso{};
-static_assert(default_graphics_pso.vertex_spirv.size == 0 &&
-              default_graphics_pso.fragment_spirv.size == 0 &&
+static_assert(default_graphics_pso.vertex.spirv.size == 0 && default_graphics_pso.vertex.metallib.size == 0 &&
+              default_graphics_pso.fragment.spirv.size == 0 && default_graphics_pso.fragment.metallib.size == 0 &&
               default_graphics_pso.color_targets.size == 0 &&
               default_graphics_pso.depth_format == gpu::Format::undefined &&
               default_graphics_pso.stencil_format == gpu::Format::undefined);
 constexpr gpu::MeshPSODesc default_mesh_pso{};
-static_assert(default_mesh_pso.task_spirv.data == nullptr && default_mesh_pso.task_spirv.size == 0 &&
-              default_mesh_pso.mesh_spirv.size == 0 &&
-              default_mesh_pso.fragment_spirv.size == 0 &&
+static_assert(default_mesh_pso.task.spirv.data == nullptr && default_mesh_pso.task.spirv.size == 0 &&
+              default_mesh_pso.task.metallib.data == nullptr && default_mesh_pso.mesh.spirv.size == 0 &&
+              default_mesh_pso.fragment.spirv.size == 0 &&
               default_mesh_pso.color_targets.size == 0 &&
               default_mesh_pso.depth_format == gpu::Format::undefined &&
               default_mesh_pso.stencil_format == gpu::Format::undefined);
@@ -509,7 +509,8 @@ using CommandPoolFunction = void (*)(gpu::CommandPool*) noexcept;
 using BeginCommandsFunction = gpu::CommandBuffer* (*)(gpu::CommandPool*) noexcept;
 using EndCommandsFunction = void (*)(gpu::CommandBuffer*) noexcept;
 using CommandBatch = gpu::Span<gpu::CommandBuffer* const>;
-using CreateComputePSOFunction = gpu::PSO* (*)(gpu::Device*, gpu::Span<const uint32>) noexcept;
+using CreateComputePSOFunction = gpu::PSO* (*)(gpu::Device*, const gpu::ShaderCode&) noexcept;
+using GetHandleFunction = uint64 (*)(const gpu::GpuHeap&, uint32) noexcept;
 using SubmitFunction = void (*)(gpu::Device*, const gpu::SubmitDesc&, uint32) noexcept;
 using SubmitAndPresentFunction = void (*)(gpu::Device*, const gpu::SubmitDesc&) noexcept;
 using WriteTimestampFunction = void (*)(gpu::CommandBuffer*, uint64*, gpu::Stage) noexcept;
@@ -544,6 +545,8 @@ static_assert(gpu::detail::is_same_v<decltype(&gpu::reset_command_pool), Command
 static_assert(gpu::detail::is_same_v<decltype(&gpu::begin_commands), BeginCommandsFunction>);
 static_assert(gpu::detail::is_same_v<decltype(&gpu::end_commands), EndCommandsFunction>);
 static_assert(gpu::detail::is_same_v<decltype(&gpu::create_compute_pso), CreateComputePSOFunction>);
+static_assert(gpu::detail::is_same_v<decltype(&gpu::get_texture_handle), GetHandleFunction>);
+static_assert(gpu::detail::is_same_v<decltype(&gpu::get_sampler_handle), GetHandleFunction>);
 static_assert(gpu::detail::is_same_v<decltype(&gpu::submit), SubmitFunction>);
 static_assert(gpu::detail::is_same_v<decltype(&gpu::submit_and_present), SubmitAndPresentFunction>);
 static_assert(gpu::detail::is_same_v<decltype(&gpu::write_timestamp), WriteTimestampFunction>);
@@ -607,13 +610,15 @@ static_assert(__is_constructible(CommandBatch, std::initializer_list<gpu::Comman
     gpu::RenderView* created_render_view = gpu::create_render_view(texture);
     gpu::write_texture_descriptor(device, descriptor, texture, gpu::TextureDescriptorType::sampled);
     gpu::write_sampler_descriptor(device, descriptor);
+    const uint64 texture_handle = gpu::get_texture_handle(texture_descriptors, 0);
+    const uint64 sampler_handle = gpu::get_sampler_handle(sampler_descriptors, 0);
     gpu::destroy_render_view(created_render_view);
     gpu::destroy_texture(created_texture);
     gpu::destroy_texture_heap(texture_heap);
 
     gpu::PSO* graphics = gpu::create_graphics_pso(device, {});
     gpu::PSO* mesh = gpu::create_mesh_pso(device, {});
-    gpu::PSO* compute = gpu::create_compute_pso(device, shader_words);
+    gpu::PSO* compute = gpu::create_compute_pso(device, {.spirv = shader_words});
     gpu::destroy_pso(graphics);
     gpu::destroy_pso(mesh);
     gpu::destroy_pso(compute);
@@ -663,6 +668,8 @@ static_assert(__is_constructible(CommandBatch, std::initializer_list<gpu::Comman
     (void)drawable_extent;
     (void)frame;
     (void)texture_size_align;
+    (void)texture_handle;
+    (void)sampler_handle;
 }
 
 int main()

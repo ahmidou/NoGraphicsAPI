@@ -50,7 +50,7 @@ heaps are part of the expected shader model, not opt-in cases. The significant c
 
 Task and mesh shaders additionally request `spvMeshShadingEXT`. Compile `taskMain` with
 `-stage amplification`; its payload selects and launches mesh workgroups with `DispatchMesh`.
-Mesh shaders use `-stage mesh` and triangle output. Set `MeshPSODesc::task_spirv` to attach the task stage;
+Mesh shaders use `-stage mesh` and triangle output. Set `MeshPSODesc::task` to attach the task stage;
 an empty span launches mesh workgroups directly. Both stages receive the draw's shared root.
 
 ## Root ABI

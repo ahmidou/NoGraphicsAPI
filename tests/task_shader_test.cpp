@@ -60,9 +60,9 @@ static bool initialize(Fixture& fixture) noexcept
     if (!load_shader(NOGRAPHICSAPI_TASK_TEST_TASK_SPV, task) || !load_shader(NOGRAPHICSAPI_TASK_TEST_MESH_SPV, mesh)
         || !load_shader(NOGRAPHICSAPI_TASK_TEST_FRAGMENT_SPV, fragment)) return false;
     fixture.pso = gpu::create_mesh_pso(fixture.device, {
-        .task_spirv = {task.words, task.count},
-        .mesh_spirv = {mesh.words, mesh.count},
-        .fragment_spirv = {fragment.words, fragment.count},
+        .task = {.spirv = {task.words, task.count}},
+        .mesh = {.spirv = {mesh.words, mesh.count}},
+        .fragment = {.spirv = {fragment.words, fragment.count}},
         .color_targets = {{.format = gpu::Format::rgba8_unorm}},
     });
     if (!fixture.pso) return false;

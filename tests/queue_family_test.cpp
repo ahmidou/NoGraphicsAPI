@@ -41,7 +41,7 @@ static bool initialize(Fixture& fixture) noexcept
     const bool valid = size >= 20 && size % sizeof(uint32) == 0 && !ferror(file) && feof(file) && code[0] == 0x07230203u;
     fclose(file);
     if (!valid) { fprintf(stderr, "Invalid queue-family test shader.\n"); return false; }
-    fixture.compute = create_compute_pso(fixture.device, {code, size / sizeof(uint32)});
+    fixture.compute = create_compute_pso(fixture.device, {.spirv = {code, size / sizeof(uint32)}});
     const DeviceCaps& caps = get_device_caps(fixture.device);
     fixture.queues[0] = caps.copy_queue_count ? caps.general_queue_count + caps.compute_queue_count : 0;
     fixture.queues[1] = caps.compute_queue_count ? caps.general_queue_count : 0;

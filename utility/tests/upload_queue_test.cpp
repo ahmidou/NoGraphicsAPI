@@ -118,7 +118,7 @@ static bool initialize(Fixture& fixture)
     const bool valid_shader = shader_size != 0 && shader_size % sizeof(uint32) == 0 && !ferror(shader) && feof(shader);
     fclose(shader);
     if (!valid_shader) { fprintf(stderr, "Invalid upload queue compute shader.\n"); return false; }
-    fixture.compute = create_compute_pso(fixture.device, {code, shader_size / sizeof(uint32)});
+    fixture.compute = create_compute_pso(fixture.device, {.spirv = {code, shader_size / sizeof(uint32)}});
     if (!fixture.compute) return false;
 #endif
     uint64 heap_bytes = 0;

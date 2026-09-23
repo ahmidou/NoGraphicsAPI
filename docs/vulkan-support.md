@@ -224,7 +224,7 @@ commands, synchronization, or other passes between segments. Each buffer sets it
 
 The raster path has empty fixed vertex input because shaders fetch through GPU pointers. Mesh PSOs
 use `VK_EXT_mesh_shader`, with task and mesh support enabled as part of the fixed device baseline.
-`MeshPSODesc::task_spirv` adds `taskMain` before `meshMain`; direct and indirect draw counts then launch
+`MeshPSODesc::task` adds `taskMain` before `meshMain`; direct and indirect draw counts then launch
 task workgroups, which cull or expand work through their payload and mesh dispatch. Empty task SPIR-V
 launches mesh workgroups directly. `Stage::task` names task-stage hazards in barriers. All graphics
 stages share the same root ABI and descriptor heaps.

@@ -592,10 +592,18 @@ struct DepthStencilState
     StencilFaceState back = {};
 };
 
+// One compiled shader stage. Each backend reads only its own artifact: SPIR-V on Vulkan, a metallib on Metal.
+// Entry points use fixed names: vertexMain, fragmentMain, computeMain, meshMain, taskMain.
+struct ShaderCode
+{
+    Span<const uint32> spirv = {};
+    ByteSpan metallib = {};
+};
+
 struct GraphicsPSODesc
 {
-    Span<const uint32> vertex_spirv = {};
-    Span<const uint32> fragment_spirv = {}; // Empty omits the fragment stage, for depth-only rasterization.
+    ShaderCode vertex = {};
+    ShaderCode fragment = {}; // Empty omits the fragment stage, for depth-only rasterization.
     Span<const ColorTargetDesc> color_targets = {};
     Format depth_format = Format::undefined;
     Format stencil_format = Format::undefined;
@@ -604,9 +612,9 @@ struct GraphicsPSODesc
 
 struct MeshPSODesc
 {
-    Span<const uint32> task_spirv = {}; // Empty launches mesh workgroups directly; otherwise draws launch taskMain workgroups.
-    Span<const uint32> mesh_spirv = {};
-    Span<const uint32> fragment_spirv = {}; // Empty omits the fragment stage, for depth-only rasterization.
+    ShaderCode task = {}; // Empty launches mesh workgroups directly; otherwise draws launch taskMain workgroups.
+    ShaderCode mesh = {};
+    ShaderCode fragment = {}; // Empty omits the fragment stage, for depth-only rasterization.
     Span<const ColorTargetDesc> color_targets = {};
     Format depth_format = Format::undefined;
     Format stencil_format = Format::undefined;
@@ -720,10 +728,14 @@ void destroy_render_view(RenderView* render_view) noexcept;
 void write_texture_descriptor(Device* device, void* cpu_destination, const Texture* texture, TextureDescriptorType type,
                               const TextureDescriptorDesc& desc = {}) noexcept;
 void write_sampler_descriptor(Device* device, void* cpu_destination, const SamplerDesc& desc = {}) noexcept;
+// Shader-visible handle of a written descriptor slot, for Slang `.Handle` fields in roots and GPU memory: the slot index on
+// Vulkan, the resource ID stored by write_*_descriptor on Metal. Shaders use handles as given; they cannot derive new ones.
+[[nodiscard]] uint64 get_texture_handle(const GpuHeap& texture_descriptor_heap, uint32 slot) noexcept;
+[[nodiscard]] uint64 get_sampler_handle(const GpuHeap& sampler_descriptor_heap, uint32 slot) noexcept;
 
 [[nodiscard]] PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept;
-[[nodiscard]] PSO* create_compute_pso(Device* device, Span<const uint32> compute_spirv) noexcept;
+[[nodiscard]] PSO* create_compute_pso(Device* device, const ShaderCode& compute) noexcept;
 void destroy_pso(PSO* pso) noexcept;
 
 // Pools retain command storage until destruction. Reset only after every submitted buffer from this pool completes; unsubmitted buffers are discarded.

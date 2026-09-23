@@ -180,12 +180,12 @@ int main()
         close_example_window(window);
         return 1;
     }
-    PSO* simulation_pso = create_compute_pso(device, simulation_spirv);
+    PSO* simulation_pso = create_compute_pso(device, {.spirv = simulation_spirv});
     free(simulation_spirv.data);
 
     PSO* gbuffer_pso = create_mesh_pso(device, {
-        .mesh_spirv = gbuffer_mesh_spirv,
-        .fragment_spirv = gbuffer_fragment_spirv,
+        .mesh = {.spirv = gbuffer_mesh_spirv},
+        .fragment = {.spirv = gbuffer_fragment_spirv},
         .color_targets = {
             {.format = Format::rgba8_unorm},
             {.format = Format::rgba16_float},
@@ -197,8 +197,8 @@ int main()
     free(gbuffer_mesh_spirv.data);
 
     PSO* deferred_lighting_pso = create_graphics_pso(device, {
-        .vertex_spirv = deferred_vertex_spirv,
-        .fragment_spirv = deferred_fragment_spirv,
+        .vertex = {.spirv = deferred_vertex_spirv},
+        .fragment = {.spirv = deferred_fragment_spirv},
         .color_targets = {{.format = Format::bgra8_srgb}},
     });
     free(deferred_fragment_spirv.data);

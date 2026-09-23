@@ -2684,6 +2684,16 @@ void write_sampler_descriptor(Device* device, void* cpu_destination, const Sampl
     assert_vk(device->fn.write_sampler_descriptors(device->device, 1, &sampler_info, &destination));
 }
 
+uint64 get_texture_handle(const GpuHeap&, uint32 slot) noexcept
+{
+    return slot;
+}
+
+uint64 get_sampler_handle(const GpuHeap&, uint32 slot) noexcept
+{
+    return slot;
+}
+
 namespace
 {
 
@@ -2841,19 +2851,20 @@ PSO* create_raster_pso(Device* device, Span<const uint32> first_stage_spirv, Spa
 
 PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept
 {
-    return create_raster_pso(device, desc.vertex_spirv, desc.fragment_spirv, desc.color_targets, desc.depth_format,
+    return create_raster_pso(device, desc.vertex.spirv, desc.fragment.spirv, desc.color_targets, desc.depth_format,
                              desc.stencil_format, desc.rasterization, false);
 }
 
 PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept
 {
-    return create_raster_pso(device, desc.mesh_spirv, desc.fragment_spirv, desc.color_targets, desc.depth_format,
-                             desc.stencil_format, desc.rasterization, true, desc.task_spirv);
+    return create_raster_pso(device, desc.mesh.spirv, desc.fragment.spirv, desc.color_targets, desc.depth_format,
+                             desc.stencil_format, desc.rasterization, true, desc.task.spirv);
 }
 
-PSO* create_compute_pso(Device* device, Span<const uint32> compute_spirv) noexcept
+PSO* create_compute_pso(Device* device, const ShaderCode& compute) noexcept
 {
     assert(device && "create_compute_pso called with a null device");
+    const Span<const uint32> compute_spirv = compute.spirv;
 
     const VkShaderModuleCreateInfo module_info{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,

@@ -180,8 +180,8 @@ bool initialize(Fixture& fixture) noexcept
     ShaderCode fragment{};
     if (!load_shader(NOGRAPHICSAPI_CONTINUATION_VERTEX_SPV, vertex) || !load_shader(NOGRAPHICSAPI_CONTINUATION_FRAGMENT_SPV, fragment)) return false;
     fixture.pso = gpu::create_graphics_pso(fixture.device, {
-        .vertex_spirv = {vertex.words, vertex.count},
-        .fragment_spirv = {fragment.words, fragment.count},
+        .vertex = {.spirv = {vertex.words, vertex.count}},
+        .fragment = {.spirv = {fragment.words, fragment.count}},
         .color_targets = {{.format = gpu::Format::rgba8_unorm}},
     });
     if (!fixture.pso) return false;
