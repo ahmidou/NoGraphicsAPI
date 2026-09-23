@@ -181,7 +181,7 @@ The executables are under `build-msvc/examples/<example>/Release` when using the
 - [Vulkan support and behavior](docs/vulkan-support.md)
 - [Slang shaders and root ABI](docs/slang.md)
 - [Public API](include/NoGraphicsAPI/NoGraphicsAPI.hpp)
-- [Metal porting plan — not implemented](docs/metal-porting.md)
+- [Metal 4 porting design and fork status](docs/metal-porting.md)
 
 ## License
 

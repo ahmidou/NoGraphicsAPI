@@ -1,6 +1,25 @@
 # Metal 4 porting design
 
-Status: proposed and unimplemented. NoGraphicsAPI remains Vulkan-only.
+Status: a first Metal 4 backend exists in this fork (`src/NoGraphicsAPI_metal4.mm`); mesh pipelines are not implemented yet.
+`tests/shader_pipeline_test.cpp` runs compute, copies, handles, and a draw on both backends. Where it departs from the proposal:
+
+- **Handles instead of the slot-1 pool base.** Slang rejects `ResourceDescriptorHeap[i]` for Metal (it requires
+  `glsl_hlsl_spirv_wgsl`) and no user override can reach it. Shaders instead use Slang `DescriptorHandle` fields
+  (`Texture2D<float4>.Handle`, `SamplerState.Handle`) in roots or GPU memory. Descriptor heaps store 8-byte resource IDs — texture
+  views set in an `MTLTextureViewPool`, sampler `gpuResourceID`s — and `get_texture_handle`/`get_sampler_handle` return the value to
+  place in a handle: the slot index on Vulkan, the stored ID on Metal. Root layouts match across backends; shaders cannot do handle
+  arithmetic. The Metal ABI is only the root at buffer slot 0.
+- **Threadgroup size in `ShaderCode`.** A metallib keeps only the total thread count of `[numthreads]`, so compute PSOs take
+  `ShaderCode::threads_per_threadgroup` on Metal. Compile with Slang's `metallib_4_0` capability so the shader also declares
+  `[[required_threads_per_threadgroup]]` and mismatches fail at PSO creation.
+- **Conservative ordering.** Each encoder opens with a barrier after all earlier queue work; `barrier()` orders work within the open
+  encoder.
+- **Residency.** Every buffer, texture heap, and placed texture is in one device-wide residency set. Placed textures are added
+  individually because GPU shader validation ignores heap residency for them.
+- **Copies need buffer objects**, so GPU heaps are found by address in a device registry: heap creation/destruction is not safe
+  concurrently with other heap creation/destruction or with recording copies.
+- The Metal viewport is flipped so the same clip-space output covers the same pixels as on Vulkan.
+
 
 This document asks whether a Metal 4 backend can preserve the important ideas from
 [*No Graphics API*](https://www.sebastianaaltonen.com/blog/no-graphics-api), rather than merely
