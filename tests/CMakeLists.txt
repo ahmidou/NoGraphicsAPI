@@ -1,3 +1,54 @@
+if(NOT COMMAND NoGraphicsAPI_compile_slang)
+    include(${PROJECT_SOURCE_DIR}/examples/NoGraphicsAPI_slang.cmake)
+endif()
+
+# Backend-neutral end-to-end test: compute, copies, texture/sampler handles, and a full-screen draw.
+set(pipeline_shared ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_shared.h)
+set(pipeline_shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+if(APPLE)
+    foreach(name fill texture draw)
+        NoGraphicsAPI_compile_slang_metallib(${pipeline_shaders}/shader_pipeline_${name}.metallib
+            ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_${name}.slang DEPENDS ${pipeline_shared})
+    endforeach()
+    set(pipeline_fill ${pipeline_shaders}/shader_pipeline_fill.metallib)
+    set(pipeline_texture ${pipeline_shaders}/shader_pipeline_texture.metallib)
+    set(pipeline_vertex ${pipeline_shaders}/shader_pipeline_draw.metallib)
+    set(pipeline_fragment ${pipeline_shaders}/shader_pipeline_draw.metallib)
+else()
+    set(pipeline_fill ${pipeline_shaders}/shader_pipeline_fill.comp.spv)
+    set(pipeline_texture ${pipeline_shaders}/shader_pipeline_texture.comp.spv)
+    set(pipeline_vertex ${pipeline_shaders}/shader_pipeline_draw.vert.spv)
+    set(pipeline_fragment ${pipeline_shaders}/shader_pipeline_draw.frag.spv)
+    NoGraphicsAPI_compile_slang(${pipeline_fill} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_fill.slang computeMain compute DEPENDS ${pipeline_shared})
+    NoGraphicsAPI_compile_slang(${pipeline_texture} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_texture.slang computeMain compute DEPENDS ${pipeline_shared})
+    NoGraphicsAPI_compile_slang(${pipeline_vertex} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_draw.slang vertexMain vertex DEPENDS ${pipeline_shared})
+    NoGraphicsAPI_compile_slang(${pipeline_fragment} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_draw.slang fragmentMain fragment DEPENDS ${pipeline_shared})
+endif()
+add_executable(test_shader_pipeline shader_pipeline_test.cpp ${pipeline_fill} ${pipeline_texture} ${pipeline_vertex} ${pipeline_fragment})
+NoGraphicsAPI_disable_exceptions(test_shader_pipeline)
+target_link_libraries(test_shader_pipeline PRIVATE NoGraphicsAPI::NoGraphicsAPI NoGraphicsAPIUtility::types)
+target_compile_definitions(test_shader_pipeline PRIVATE
+    NOGRAPHICSAPI_PIPELINE_FILL_SHADER="${pipeline_fill}"
+    NOGRAPHICSAPI_PIPELINE_TEXTURE_SHADER="${pipeline_texture}"
+    NOGRAPHICSAPI_PIPELINE_DRAW_VERTEX_SHADER="${pipeline_vertex}"
+    NOGRAPHICSAPI_PIPELINE_DRAW_FRAGMENT_SHADER="${pipeline_fragment}")
+add_test(NAME test_shader_pipeline COMMAND test_shader_pipeline)
+set_tests_properties(test_shader_pipeline PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60 FAIL_REGULAR_EXPRESSION "Validation Error;NoGraphicsAPI validation:")
+
+# The remaining GPU tests use SPIR-V and Vulkan-specific behavior; on Apple only the backend-neutral ones build.
+if(APPLE)
+    add_executable(test_shader_types shader_types_test.cpp)
+    NoGraphicsAPI_disable_exceptions(test_shader_types)
+    target_link_libraries(test_shader_types PRIVATE NoGraphicsAPIUtility::types)
+    add_test(NAME test_shader_types COMMAND test_shader_types)
+
+    add_executable(test_api api_test.cpp)
+    NoGraphicsAPI_disable_exceptions(test_api)
+    target_link_libraries(test_api PRIVATE NoGraphicsAPI::NoGraphicsAPI)
+    add_test(NAME test_api COMMAND test_api)
+    return()
+endif()
+
 add_executable(test_shader_types shader_types_test.cpp)
 NoGraphicsAPI_disable_exceptions(test_shader_types)
 target_link_libraries(test_shader_types PRIVATE NoGraphicsAPIUtility::types)
@@ -17,9 +68,6 @@ add_test(NAME test_allocators COMMAND test_allocators)
 add_executable(test_upload_queue ../utility/tests/upload_queue_test.cpp)
 NoGraphicsAPI_disable_exceptions(test_upload_queue)
 target_link_libraries(test_upload_queue PRIVATE NoGraphicsAPIUtility::uploads)
-if(NOT COMMAND NoGraphicsAPI_compile_slang)
-    include(${PROJECT_SOURCE_DIR}/examples/NoGraphicsAPI_slang.cmake)
-endif()
 set(upload_queue_shader ${CMAKE_CURRENT_SOURCE_DIR}/shaders/upload_queue.slang)
 set(upload_queue_spv ${CMAKE_CURRENT_BINARY_DIR}/shaders/upload_queue.comp.spv)
 NoGraphicsAPI_compile_slang(${upload_queue_spv} ${upload_queue_shader} computeMain compute

@@ -1,5 +1,7 @@
 find_program(NOGRAPHICSAPI_SLANGC NAMES slangc REQUIRED)
-find_program(NOGRAPHICSAPI_SPIRV_VAL NAMES spirv-val REQUIRED)
+if(NOT APPLE)
+    find_program(NOGRAPHICSAPI_SPIRV_VAL NAMES spirv-val REQUIRED)
+endif()
 
 function(NoGraphicsAPI_require_tool_version program argument name minimum pattern)
     execute_process(
@@ -25,9 +27,11 @@ endfunction()
 NoGraphicsAPI_require_tool_version(
     "${NOGRAPHICSAPI_SLANGC}" -version Slang 2026.13.1
     "([0-9]+\\.[0-9]+(\\.[0-9]+)?)")
-NoGraphicsAPI_require_tool_version(
-    "${NOGRAPHICSAPI_SPIRV_VAL}" --version SPIRV-Tools 2026.3
-    "SPIRV-Tools v([0-9]+\\.[0-9]+)")
+if(NOT APPLE)
+    NoGraphicsAPI_require_tool_version(
+        "${NOGRAPHICSAPI_SPIRV_VAL}" --version SPIRV-Tools 2026.3
+        "SPIRV-Tools v([0-9]+\\.[0-9]+)")
+endif()
 
 function(NoGraphicsAPI_compile_slang output source entry stage)
     cmake_parse_arguments(SLANG "" "" "DEPENDS" ${ARGN})
@@ -63,6 +67,36 @@ function(NoGraphicsAPI_compile_slang output source entry stage)
             ${PROJECT_SOURCE_DIR}/utility/include/NoGraphicsAPIUtility/shader_types.h
         VERBATIM
         COMMENT "Compiling Slang ${stage} shader ${entry}"
+    )
+endfunction()
+
+# Metal: one metallib per source holding all its entry points. metallib_4_0 keeps [numthreads] in the MSL
+# ([[required_threads_per_threadgroup]]), which the Metal backend reads back from the compute pipeline.
+function(NoGraphicsAPI_compile_slang_metallib output source)
+    cmake_parse_arguments(SLANG "" "" "DEPENDS" ${ARGN})
+    get_filename_component(output_dir "${output}" DIRECTORY)
+    get_filename_component(output_name "${output}" NAME_WE)
+    set(msl ${output_dir}/${output_name}.metal)
+    set(air ${output_dir}/${output_name}.air)
+    add_custom_command(
+        OUTPUT ${output}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${output_dir}
+        COMMAND ${NOGRAPHICSAPI_SLANGC}
+            ${source}
+            -target metal
+            -capability metallib_4_0
+            -matrix-layout-row-major
+            -I ${CMAKE_CURRENT_SOURCE_DIR}
+            -I ${PROJECT_SOURCE_DIR}/include
+            -I ${PROJECT_SOURCE_DIR}/utility/include
+            -o ${msl}
+        COMMAND xcrun metal -std=metal4.0 -c ${msl} -o ${air}
+        COMMAND xcrun metallib ${air} -o ${output}
+        DEPENDS ${source} ${SLANG_DEPENDS}
+            ${PROJECT_SOURCE_DIR}/include/NoGraphicsAPI/types.h
+            ${PROJECT_SOURCE_DIR}/utility/include/NoGraphicsAPIUtility/shader_types.h
+        VERBATIM
+        COMMENT "Compiling Slang ${output_name}.metallib"
     )
 endfunction()
 
