@@ -12,8 +12,9 @@ Status: a first Metal 4 backend exists in this fork (`src/NoGraphicsAPI_metal4.m
 - **Threadgroup size in `ShaderCode`.** A metallib keeps only the total thread count of `[numthreads]`, so compute PSOs take
   `ShaderCode::threads_per_threadgroup` on Metal. Compile with Slang's `metallib_4_0` capability so the shader also declares
   `[[required_threads_per_threadgroup]]` and mismatches fail at PSO creation.
-- **Conservative ordering.** Each encoder opens with a barrier after all earlier queue work; `barrier()` orders work within the open
-  encoder.
+- **`barrier()` is the only ordering**, as on Vulkan. Metal barriers attach to encoders, so a barrier applies to the open encoder and
+  to every encoder opened later in the same command buffer, but cannot reach another command buffer: record it in the command buffer
+  that consumes the data (valid on Vulkan too).
 - **Residency.** Every buffer, texture heap, and placed texture is in one device-wide residency set. Placed textures are added
   individually because GPU shader validation ignores heap residency for them.
 - **Copies need buffer objects**, so GPU heaps are found by address in a device registry: heap creation/destruction is not safe

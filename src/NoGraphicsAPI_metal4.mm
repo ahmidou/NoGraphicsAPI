@@ -15,8 +15,9 @@
 #define assert(expression) ((void)sizeof(static_cast<bool>(expression)))
 #endif
 
-// Metal 4 backend. Every allocation lives in one device-wide residency set attached to every queue. Encoders start with a
-// barrier after all earlier queue work, so ordering across encoders is conservative; barrier() orders work inside an encoder.
+// Metal 4 backend. Every allocation lives in one device-wide residency set attached to every queue. Metal 4 orders nothing
+// between encoders, so barrier() is the only ordering, as on Vulkan: it applies to the open encoder at once and to every encoder
+// opened later in the same command buffer (Metal barriers attach to encoders, so one cannot reach another command buffer).
 // Descriptor heaps hold 8-byte Metal resource IDs: texture slots are views in an MTLTextureViewPool, sampler slots are
 // sampler gpuResourceIDs. Shaders read those IDs through Slang handles in the root; heaps are never bound to the GPU.
 // Buffer copies need MTLBuffer objects, so heaps are found by address in a device registry. Unlike Vulkan, GPU heap
@@ -175,6 +176,9 @@ namespace gpu {
         id<MTL4ComputeCommandEncoder> compute = nil;
         id<MTL4RenderCommandEncoder> render = nil;
         const PSO* pso = nullptr;
+        // Stages of barrier() calls recorded so far in this command buffer; every encoder opened later waits on them.
+        MTLStages barrier_source = 0;
+        MTLStages barrier_destination = 0;
         bool swapchain = false;
         CommandBuffer* next = nullptr;
     };
@@ -459,7 +463,10 @@ namespace gpu {
             {
                 commands->compute = [commands->command_buffer computeCommandEncoder];
                 [commands->compute setArgumentTable:commands->argument_table];
-                [commands->compute barrierAfterQueueStages:MTLStageAll beforeStages:compute_encoder_stages visibilityOptions:MTL4VisibilityOptionDevice];
+                if (commands->barrier_destination & compute_encoder_stages)
+                    [commands->compute barrierAfterQueueStages:commands->barrier_source
+                                                  beforeStages:commands->barrier_destination & compute_encoder_stages
+                                             visibilityOptions:MTL4VisibilityOptionDevice];
             }
             return commands->compute;
         }
@@ -1154,6 +1161,8 @@ namespace gpu {
         }
         assert(!commands->swapchain);
         commands->pso = nullptr;
+        commands->barrier_source = 0;
+        commands->barrier_destination = 0;
         [commands->command_buffer beginCommandBufferWithAllocator:pool->allocator];
         return commands;
     }
@@ -1193,17 +1202,21 @@ namespace gpu {
     void barrier(CommandBuffer* commands, Stage before, Access, Stage after, Access) noexcept
     {
         assert(commands);
-        // Work in earlier encoders is already ordered by each encoder's opening barrier; only the open encoder needs one.
         const MTLStages source = to_mtl(before);
         const MTLStages destination = to_mtl(after);
-        if (commands->compute && (source & compute_encoder_stages) && (destination & compute_encoder_stages))
-            [commands->compute barrierAfterEncoderStages:source & compute_encoder_stages
-                                     beforeEncoderStages:destination & compute_encoder_stages
-                                       visibilityOptions:MTL4VisibilityOptionDevice];
-        if (commands->render && (source & render_encoder_stages) && (destination & render_encoder_stages))
-            [commands->render barrierAfterEncoderStages:source & render_encoder_stages
-                                    beforeEncoderStages:destination & render_encoder_stages
-                                      visibilityOptions:MTL4VisibilityOptionDevice];
+        if (!source || !destination)
+            return;
+        commands->barrier_source |= source;
+        commands->barrier_destination |= destination;
+        // The open encoder: earlier encoders through a queue barrier, its own earlier commands through an encoder barrier.
+        id<MTL4CommandEncoder> encoder = commands->render ? static_cast<id<MTL4CommandEncoder>>(commands->render) : commands->compute;
+        const MTLStages encoder_stages = commands->render ? render_encoder_stages : compute_encoder_stages;
+        if (!encoder || !(destination & encoder_stages))
+            return;
+        [encoder barrierAfterQueueStages:source beforeStages:destination & encoder_stages visibilityOptions:MTL4VisibilityOptionDevice];
+        if (source & encoder_stages)
+            [encoder barrierAfterEncoderStages:source & encoder_stages beforeEncoderStages:destination & encoder_stages
+                             visibilityOptions:MTL4VisibilityOptionDevice];
     }
 
     // ---------------------------------------------------------------------------------------------------------------------
@@ -1345,7 +1358,10 @@ namespace gpu {
         if (!commands->render)
             fail("render encoder creation", nil);
         [commands->render setArgumentTable:commands->argument_table atStages:render_argument_stages];
-        [commands->render barrierAfterQueueStages:MTLStageAll beforeStages:render_encoder_stages visibilityOptions:MTL4VisibilityOptionDevice];
+        if (commands->barrier_destination & render_encoder_stages)
+            [commands->render barrierAfterQueueStages:commands->barrier_source
+                                         beforeStages:commands->barrier_destination & render_encoder_stages
+                                    visibilityOptions:MTL4VisibilityOptionDevice];
 
         set_viewport(commands, { .width = static_cast<float>(area->width), .height = static_cast<float>(area->height) });
         set_scissor(commands, { .width = area->width, .height = area->height });

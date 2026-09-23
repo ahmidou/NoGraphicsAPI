@@ -761,6 +761,8 @@ void copy_memory(CommandBuffer* commands, GpuRange source, GpuRange destination)
 void copy_memory_to_texture(CommandBuffer* commands, GpuRange source, Texture* destination, const TextureCopyDesc& copy = {}) noexcept;
 void copy_texture_to_memory(CommandBuffer* commands, Texture* source, GpuRange destination, const TextureCopyDesc& copy = {}) noexcept;
 
+// Orders later commands of this command buffer after earlier work. For work in an earlier command buffer on the same queue, record the
+// barrier in the later command buffer before the dependent commands; across queues, use timeline waits.
 void barrier(CommandBuffer* commands, Stage before, Access before_access, Stage after, Access after_access) noexcept;
 
 // Up to DeviceDesc::timestamp_query_count markers per command buffer. stage must map to a single GPU pipeline stage.
