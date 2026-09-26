@@ -2694,6 +2694,24 @@ uint64 get_sampler_handle(const GpuHeap&, uint32 slot) noexcept
     return slot;
 }
 
+// Non-dispatchable handles are pointers on the 64-bit targets NoGraphicsAPI requires.
+void* get_native_texture(const Texture* texture) noexcept
+{
+    assert(texture);
+    return texture->image;
+}
+
+void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept
+{
+    assert(semaphore);
+    return semaphore->semaphore;
+}
+
+void* get_native_residency_set(const Device*) noexcept
+{
+    return nullptr;
+}
+
 namespace
 {
 

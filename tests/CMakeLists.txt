@@ -46,6 +46,20 @@ if(APPLE)
     NoGraphicsAPI_disable_exceptions(test_api)
     target_link_libraries(test_api PRIVATE NoGraphicsAPI::NoGraphicsAPI)
     add_test(NAME test_api COMMAND test_api)
+
+    # Native handles: a raw MTL4CommandQueue waits on NoGraphicsAPI's shared event, then samples its texture.
+    add_executable(test_native_interop native_interop_test.mm)
+    NoGraphicsAPI_disable_exceptions(test_native_interop)
+    set_source_files_properties(native_interop_test.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    target_link_libraries(test_native_interop PRIVATE NoGraphicsAPI::NoGraphicsAPI)
+    add_test(NAME test_native_interop COMMAND test_native_interop)
+    add_test(NAME test_native_interop_texture_residency COMMAND test_native_interop --texture-residency)
+    # Proves validation catches the foreign queue's missing residency, so the passing modes above are meaningful.
+    add_test(NAME test_native_interop_no_residency COMMAND test_native_interop --no-residency)
+    set_tests_properties(test_native_interop test_native_interop_texture_residency test_native_interop_no_residency PROPERTIES
+        SKIP_RETURN_CODE 77 TIMEOUT 60 ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1;MTL_SHADER_VALIDATION_REPORT_TO_STDERR=1")
+    set_tests_properties(test_native_interop test_native_interop_texture_residency PROPERTIES FAIL_REGULAR_EXPRESSION "Invalid Metal usage")
+    set_tests_properties(test_native_interop_no_residency PROPERTIES PASS_REGULAR_EXPRESSION "Texture is not resident")
     return()
 endif()
 

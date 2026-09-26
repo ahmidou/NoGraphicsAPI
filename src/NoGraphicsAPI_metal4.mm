@@ -1016,6 +1016,24 @@ namespace gpu {
         return get_texture_handle(sampler_descriptor_heap, slot);
     }
 
+    void* get_native_texture(const Texture* texture) noexcept
+    {
+        assert(texture);
+        return (__bridge void*)texture->texture;
+    }
+
+    void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept
+    {
+        assert(semaphore);
+        return (__bridge void*)semaphore->event;
+    }
+
+    void* get_native_residency_set(const Device* device) noexcept
+    {
+        assert(device);
+        return (__bridge void*)device->residency;
+    }
+
     // ---------------------------------------------------------------------------------------------------------------------
     // Pipelines
     // ---------------------------------------------------------------------------------------------------------------------

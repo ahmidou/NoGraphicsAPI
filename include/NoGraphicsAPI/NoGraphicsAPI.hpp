@@ -736,6 +736,15 @@ void write_sampler_descriptor(Device* device, void* cpu_destination, const Sampl
 [[nodiscard]] uint64 get_texture_handle(const GpuHeap& texture_descriptor_heap, uint32 slot) noexcept;
 [[nodiscard]] uint64 get_sampler_handle(const GpuHeap& sampler_descriptor_heap, uint32 slot) noexcept;
 
+// Native objects, for interop with code that talks to the platform API directly (a UI renderer sampling a
+// texture NoGraphicsAPI rendered, and waiting for it). Borrowed, not retained; valid while the object lives.
+// Metal: id<MTLTexture> / id<MTLSharedEvent> / id<MTLResidencySet>. Vulkan: VkImage / VkSemaphore (timeline) / nullptr.
+// Metal residency is per queue: another queue using a NoGraphicsAPI texture must add the device residency set (addResidencySet:)
+// or the texture itself to one of its own sets.
+[[nodiscard]] void* get_native_texture(const Texture* texture) noexcept;
+[[nodiscard]] void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept;
+[[nodiscard]] void* get_native_residency_set(const Device* device) noexcept;
+
 [[nodiscard]] PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_compute_pso(Device* device, const ShaderCode& compute) noexcept;

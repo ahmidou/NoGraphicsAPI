@@ -17,6 +17,10 @@ Status: a first Metal 4 backend exists in this fork (`src/NoGraphicsAPI_metal4.m
   that consumes the data (valid on Vulkan too).
 - **Residency.** Every buffer, texture heap, and placed texture is in one device-wide residency set. Placed textures are added
   individually because GPU shader validation ignores heap residency for them.
+- **Native handles for interop.** `get_native_texture`, `get_native_timeline_semaphore`, and `get_native_residency_set` return the
+  `MTLTexture`, `MTLSharedEvent`, and device `MTLResidencySet` (`VkImage`, `VkSemaphore`, and null on Vulkan). Residency is per queue:
+  a foreign `MTL4CommandQueue`, such as a UI renderer's, that waits on the event and samples the texture must add the device set or
+  the texture to its own set. Only GPU shader validation reports the omission (`tests/native_interop_test.mm`).
 - **Copies need buffer objects**, so GPU heaps are found by address in a device registry: heap creation/destruction is not safe
   concurrently with other heap creation/destruction or with recording copies.
 - The Metal viewport is flipped so the same clip-space output covers the same pixels as on Vulkan.
