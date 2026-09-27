@@ -744,6 +744,12 @@ void write_sampler_descriptor(Device* device, void* cpu_destination, const Sampl
 [[nodiscard]] void* get_native_texture(const Texture* texture) noexcept;
 [[nodiscard]] void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept;
 [[nodiscard]] void* get_native_residency_set(const Device* device) noexcept;
+// The queue itself, for a foreign renderer submitting on it instead of on a queue of its own: Metal id<MTL4CommandQueue>, Vulkan VkQueue.
+// Externally synchronized like the queue: serialize foreign use with this queue_index's submits, waits and wait_idle. Nothing orders
+// work between command buffers, so a foreign user orders its work against NoGraphicsAPI's with the platform's barriers, as barrier() does:
+// on Metal, a consumer barrier (barrierAfterQueueStages:beforeStages:visibilityOptions:) in each encoder that consumes earlier queue work.
+// The device residency set is already on the queue. queue_index must be less than DeviceCaps::queue_count.
+[[nodiscard]] void* get_native_queue(Device* device, uint32 queue_index = 0) noexcept;
 
 [[nodiscard]] PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept;

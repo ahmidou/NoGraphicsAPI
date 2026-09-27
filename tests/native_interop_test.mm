@@ -2,6 +2,8 @@
 // renderer would own, waits on the MTLSharedEvent, then samples and blits that texture into a readback buffer.
 // Modes pick how the foreign queue makes NoGraphicsAPI memory resident: the device residency set (default), the texture alone in the
 // foreign queue's own set (what imgui_impl_metal4 does for user textures), or nothing (--no-residency, which GPU shader validation rejects).
+// --same-queue submits the raw command buffer on NoGraphicsAPI's own queue (get_native_queue) instead: no event wait, and the device
+// residency set is already there; a consumer queue barrier in the raw encoder orders its reads after the clear, as barrier() would.
 #include <NoGraphicsAPI/NoGraphicsAPI.hpp>
 
 #import <Metal/Metal.h>
@@ -37,6 +39,7 @@ int main(int argc, char** argv)
 {
     const bool texture_residency = argc > 1 && strcmp(argv[1], "--texture-residency") == 0;
     const bool no_residency = argc > 1 && strcmp(argv[1], "--no-residency") == 0;
+    const bool same_queue = argc > 1 && strcmp(argv[1], "--same-queue") == 0;
     const DeviceInit init = create_device({});
     if (init.error == Error::unsupported)
     {
@@ -73,7 +76,12 @@ int main(int argc, char** argv)
     passed = check([native_residency conformsToProtocol:@protocol(MTLResidencySet)] && [native_residency containsAllocation:native_texture.heap],
                    "the native residency set holds the texture heap") && passed;
 
-    // Clear on NoGraphicsAPI's queue and signal 2 without a CPU wait: only the foreign queue's GPU-side wait orders the read.
+    id<MTL4CommandQueue> native_queue = (__bridge id<MTL4CommandQueue>)get_native_queue(device);
+    passed = check([native_queue conformsToProtocol:@protocol(MTL4CommandQueue)] && native_queue.device == native_texture.device,
+                   "the native queue is the device's MTL4CommandQueue") && passed;
+
+    // Clear on NoGraphicsAPI's queue and signal 2 without a CPU wait: only the foreign queue's GPU-side wait (or, on the same queue,
+    // the consumer barrier) orders the read.
     reset_command_pool(pool);
     commands = begin_commands(pool);
     const ColorAttachment color{ .render_view = view, .load = LoadOp::clear, .clear = clear_color };
@@ -84,7 +92,7 @@ int main(int argc, char** argv)
 
     id<MTLDevice> mtl_device = native_texture.device;
     NSError* error = nil;
-    id<MTL4CommandQueue> queue = [mtl_device newMTL4CommandQueue];
+    id<MTL4CommandQueue> queue = same_queue ? native_queue : [mtl_device newMTL4CommandQueue];
     id<MTL4CommandAllocator> allocator = [mtl_device newCommandAllocator];
     id<MTL4CommandBuffer> command_buffer = [mtl_device newCommandBuffer];
     id<MTLBuffer> readback = [mtl_device newBufferWithLength:size * size * (sizeof(float) * 4 + 4) options:MTLResourceStorageModeShared];
@@ -111,11 +119,18 @@ int main(int argc, char** argv)
         [residency addAllocation:native_texture];
     [residency commit];
     [queue addResidencySet:residency];
-    if (!texture_residency && !no_residency)
+    const bool add_native_residency = !texture_residency && !no_residency && !same_queue;
+    if (add_native_residency)
         [queue addResidencySet:native_residency];
 
     [command_buffer beginCommandBufferWithAllocator:allocator];
     id<MTL4ComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+    // The stages NoGraphicsAPI writes textures in (render passes, dispatches, copies) before this encoder's reads, caches flushed: what
+    // barrier(color_output | compute | transfer -> compute | transfer) records. Queue barriers reach earlier command buffers on the queue.
+    if (same_queue)
+        [encoder barrierAfterQueueStages:MTLStageFragment | MTLStageDispatch | MTLStageBlit
+                            beforeStages:MTLStageDispatch | MTLStageBlit
+                       visibilityOptions:MTL4VisibilityOptionDevice];
     [encoder setComputePipelineState:pipeline];
     [table setTexture:native_texture.gpuResourceID atIndex:0];
     [table setAddress:readback.gpuAddress atIndex:0];
@@ -132,7 +147,8 @@ int main(int argc, char** argv)
     destinationBytesPerImage:size * size * 4];
     [encoder endEncoding];
     [command_buffer endCommandBuffer];
-    [queue waitForEvent:native_event value:2];
+    if (!same_queue)
+        [queue waitForEvent:native_event value:2];
     __unsafe_unretained id<MTL4CommandBuffer> batch[1]{ command_buffer };
     // The API validation layer alone misses a missing residency (the texture happens to be resident through NoGraphicsAPI's queue).
     // GPU shader validation catches it but only zeroes the read; MTL_SHADER_VALIDATION_REPORT_TO_STDERR=1 prints the report.
@@ -167,7 +183,7 @@ int main(int argc, char** argv)
     passed = check(copy_valid, "a foreign queue blits the cleared texture after waiting on the shared event") && passed;
 
     [queue removeResidencySet:residency];
-    if (!texture_residency && !no_residency)
+    if (add_native_residency)
         [queue removeResidencySet:native_residency];
     wait_idle(device);
     destroy_render_view(view);

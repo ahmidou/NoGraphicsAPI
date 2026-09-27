@@ -2712,6 +2712,12 @@ void* get_native_residency_set(const Device*) noexcept
     return nullptr;
 }
 
+void* get_native_queue(Device* device, uint32 queue_index) noexcept
+{
+    assert(device && queue_index < device->queue_count);
+    return device->queues[queue_index].queue;
+}
+
 namespace
 {
 

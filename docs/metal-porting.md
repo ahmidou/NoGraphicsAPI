@@ -21,6 +21,11 @@ Status: a first Metal 4 backend exists in this fork (`src/NoGraphicsAPI_metal4.m
   `MTLTexture`, `MTLSharedEvent`, and device `MTLResidencySet` (`VkImage`, `VkSemaphore`, and null on Vulkan). Residency is per queue:
   a foreign `MTL4CommandQueue`, such as a UI renderer's, that waits on the event and samples the texture must add the device set or
   the texture to its own set. Only GPU shader validation reports the omission (`tests/native_interop_test.mm`).
+- **Sharing the queue.** `get_native_queue` returns the `MTL4CommandQueue` (`VkQueue`) so a foreign renderer can submit on it rather than
+  on a queue of its own, which avoids cross-queue event waits and needs no residency work (the device set is already on the queue). The
+  queue is externally synchronized, and the foreign user follows the `barrier()` model: a consumer barrier in each encoder that reads earlier
+  queue work, e.g. `barrierAfterQueueStages:MTLStageFragment | MTLStageDispatch | MTLStageBlit beforeStages:MTLStageFragment
+  visibilityOptions:MTL4VisibilityOptionDevice` before sampling a texture NoGraphicsAPI rendered (`--same-queue` in the interop test).
 - **Copies need buffer objects**, so GPU heaps are found by address in a device registry: heap creation/destruction is not safe
   concurrently with other heap creation/destruction or with recording copies.
 - The Metal viewport is flipped so the same clip-space output covers the same pixels as on Vulkan.
