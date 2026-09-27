@@ -175,12 +175,12 @@ int main(int argc, char** argv)
             copy_valid = copy_valid && abs(copied[pixel * 4 + channel] - expected[channel]) <= 1;
     }
     if (gpu_error)
-        fprintf(stderr, "foreign queue error: %s\n", gpu_error.description.UTF8String);
-    passed = check(!gpu_error, "the foreign queue's command buffer completes without errors") && passed;
+        fprintf(stderr, "raw command buffer error: %s\n", gpu_error.description.UTF8String);
+    passed = check(!gpu_error, "the raw command buffer completes without errors") && passed;
     if (!sample_valid)
         fprintf(stderr, "sampled texel 0: %g %g %g %g\n", sampled[0], sampled[1], sampled[2], sampled[3]);
-    passed = check(sample_valid, "a foreign queue samples the cleared texture after waiting on the shared event") && passed;
-    passed = check(copy_valid, "a foreign queue blits the cleared texture after waiting on the shared event") && passed;
+    passed = check(sample_valid, "raw commands sample the cleared texture after the event wait or queue barrier") && passed;
+    passed = check(copy_valid, "raw commands blit the cleared texture after the event wait or queue barrier") && passed;
 
     [queue removeResidencySet:residency];
     if (add_native_residency)
