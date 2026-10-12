@@ -35,3 +35,8 @@ struct DrawRoot
     SamplerHandle sampler;
     uint32 sample_texture;
 };
+
+struct LinesRoot
+{
+    uint32 first_point;
+};

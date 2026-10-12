@@ -6,7 +6,7 @@ endif()
 set(pipeline_shared ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_shared.h)
 set(pipeline_shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 if(APPLE)
-    foreach(name fill texture draw)
+    foreach(name fill texture draw lines)
         NoGraphicsAPI_compile_slang_metallib(${pipeline_shaders}/shader_pipeline_${name}.metallib
             ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_${name}.slang DEPENDS ${pipeline_shared})
     endforeach()
@@ -14,24 +14,33 @@ if(APPLE)
     set(pipeline_texture ${pipeline_shaders}/shader_pipeline_texture.metallib)
     set(pipeline_vertex ${pipeline_shaders}/shader_pipeline_draw.metallib)
     set(pipeline_fragment ${pipeline_shaders}/shader_pipeline_draw.metallib)
+    set(pipeline_lines_vertex ${pipeline_shaders}/shader_pipeline_lines.metallib)
+    set(pipeline_lines_fragment ${pipeline_shaders}/shader_pipeline_lines.metallib)
 else()
     set(pipeline_fill ${pipeline_shaders}/shader_pipeline_fill.comp.spv)
     set(pipeline_texture ${pipeline_shaders}/shader_pipeline_texture.comp.spv)
     set(pipeline_vertex ${pipeline_shaders}/shader_pipeline_draw.vert.spv)
     set(pipeline_fragment ${pipeline_shaders}/shader_pipeline_draw.frag.spv)
+    set(pipeline_lines_vertex ${pipeline_shaders}/shader_pipeline_lines.vert.spv)
+    set(pipeline_lines_fragment ${pipeline_shaders}/shader_pipeline_lines.frag.spv)
     NoGraphicsAPI_compile_slang(${pipeline_fill} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_fill.slang computeMain compute DEPENDS ${pipeline_shared})
     NoGraphicsAPI_compile_slang(${pipeline_texture} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_texture.slang computeMain compute DEPENDS ${pipeline_shared})
     NoGraphicsAPI_compile_slang(${pipeline_vertex} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_draw.slang vertexMain vertex DEPENDS ${pipeline_shared})
     NoGraphicsAPI_compile_slang(${pipeline_fragment} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_draw.slang fragmentMain fragment DEPENDS ${pipeline_shared})
+    NoGraphicsAPI_compile_slang(${pipeline_lines_vertex} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_lines.slang vertexMain vertex DEPENDS ${pipeline_shared})
+    NoGraphicsAPI_compile_slang(${pipeline_lines_fragment} ${CMAKE_CURRENT_SOURCE_DIR}/shader_pipeline_lines.slang fragmentMain fragment DEPENDS ${pipeline_shared})
 endif()
-add_executable(test_shader_pipeline shader_pipeline_test.cpp ${pipeline_fill} ${pipeline_texture} ${pipeline_vertex} ${pipeline_fragment})
+add_executable(test_shader_pipeline shader_pipeline_test.cpp ${pipeline_fill} ${pipeline_texture} ${pipeline_vertex} ${pipeline_fragment}
+    ${pipeline_lines_vertex} ${pipeline_lines_fragment})
 NoGraphicsAPI_disable_exceptions(test_shader_pipeline)
 target_link_libraries(test_shader_pipeline PRIVATE NoGraphicsAPI::NoGraphicsAPI NoGraphicsAPIUtility::types)
 target_compile_definitions(test_shader_pipeline PRIVATE
     NOGRAPHICSAPI_PIPELINE_FILL_SHADER="${pipeline_fill}"
     NOGRAPHICSAPI_PIPELINE_TEXTURE_SHADER="${pipeline_texture}"
     NOGRAPHICSAPI_PIPELINE_DRAW_VERTEX_SHADER="${pipeline_vertex}"
-    NOGRAPHICSAPI_PIPELINE_DRAW_FRAGMENT_SHADER="${pipeline_fragment}")
+    NOGRAPHICSAPI_PIPELINE_DRAW_FRAGMENT_SHADER="${pipeline_fragment}"
+    NOGRAPHICSAPI_PIPELINE_LINES_VERTEX_SHADER="${pipeline_lines_vertex}"
+    NOGRAPHICSAPI_PIPELINE_LINES_FRAGMENT_SHADER="${pipeline_lines_fragment}")
 add_test(NAME test_shader_pipeline COMMAND test_shader_pipeline)
 set_tests_properties(test_shader_pipeline PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60 FAIL_REGULAR_EXPRESSION "Validation Error;NoGraphicsAPI validation:")
 

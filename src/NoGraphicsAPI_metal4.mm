@@ -162,6 +162,7 @@ namespace gpu {
         MTLSize threads_per_threadgroup{};
         MTLCullMode cull = MTLCullModeNone;
         MTLWinding winding = MTLWindingClockwise;
+        MTLPrimitiveType primitive = MTLPrimitiveTypeTriangle;
         float depth_bias = 0.0f;
         float depth_bias_slope = 0.0f;
         float depth_bias_clamp = 0.0f;
@@ -1054,7 +1055,9 @@ namespace gpu {
             if (desc.fragment.metallib.size)
                 pipeline.fragmentFunctionDescriptor = function_descriptor(load_library(device, desc.fragment.metallib), @"fragmentMain");
             pipeline.rasterSampleCount = 1;
-            pipeline.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+            static const MTLPrimitiveType primitives[]{ MTLPrimitiveTypeTriangle, MTLPrimitiveTypeTriangleStrip, MTLPrimitiveTypeLine, MTLPrimitiveTypeLineStrip };
+            const bool lines = desc.topology == Topology::line_list || desc.topology == Topology::line_strip;
+            pipeline.inputPrimitiveTopology = lines ? MTLPrimitiveTopologyClassLine : MTLPrimitiveTopologyClassTriangle;
             for (size_t index = 0; index < desc.color_targets.size; ++index)
             {
                 const ColorTargetDesc& target = desc.color_targets.data[index];
@@ -1077,6 +1080,7 @@ namespace gpu {
                 .cull = desc.rasterization.cull == CullMode::none ? MTLCullModeNone : MTLCullModeBack,
                 // Metal's viewport is flipped (see set_viewport), which mirrors winding; this keeps Vulkan's front-face result.
                 .winding = desc.rasterization.cull == CullMode::counter_clockwise ? MTLWindingCounterClockwise : MTLWindingClockwise,
+                .primitive = primitives[static_cast<uint32>(desc.topology)],
                 .depth_bias = desc.rasterization.depth_bias_constant,
                 .depth_bias_slope = desc.rasterization.depth_bias_slope,
                 .depth_bias_clamp = desc.rasterization.depth_bias_clamp,
@@ -1450,9 +1454,9 @@ namespace gpu {
 
     void draw(CommandBuffer* commands, ByteSpan root, uint32 vertex_count, uint32 instance_count, uint32 first_vertex, uint32 first_instance) noexcept
     {
-        assert(commands && commands->render);
+        assert(commands && commands->render && commands->pso);
         emit_root_data(commands, root);
-        [commands->render drawPrimitives:MTLPrimitiveTypeTriangle
+        [commands->render drawPrimitives:commands->pso->primitive
                              vertexStart:first_vertex
                              vertexCount:vertex_count
                            instanceCount:instance_count
@@ -1471,10 +1475,10 @@ namespace gpu {
         uint32 first_instance
     ) noexcept
     {
-        assert(commands && commands->render);
+        assert(commands && commands->render && commands->pso);
         emit_root_data(commands, root);
         const uint64 index_size = type == IndexType::uint16 ? 2 : 4;
-        [commands->render drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+        [commands->render drawIndexedPrimitives:commands->pso->primitive
                                      indexCount:index_count
                                       indexType:type == IndexType::uint16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
                                     indexBuffer:reinterpret_cast<uintptr>(indices.gpu) + first_index * index_size
@@ -1487,11 +1491,11 @@ namespace gpu {
     // Indirect argument layouts match Vulkan's: {count, instances, first, (vertex offset,) first instance}.
     void draw_indirect(CommandBuffer* commands, ByteSpan root, GpuRange arguments, uint32 draw_count, uint32 stride) noexcept
     {
-        assert(commands && commands->render);
+        assert(commands && commands->render && commands->pso);
         emit_root_data(commands, root);
         const uint64 step = stride ? stride : 4 * sizeof(uint32);
         for (uint32 index = 0; index < draw_count; ++index)
-            [commands->render drawPrimitives:MTLPrimitiveTypeTriangle indirectBuffer:reinterpret_cast<uintptr>(arguments.gpu) + index * step];
+            [commands->render drawPrimitives:commands->pso->primitive indirectBuffer:reinterpret_cast<uintptr>(arguments.gpu) + index * step];
     }
 
     void draw_indexed_indirect(
@@ -1504,11 +1508,11 @@ namespace gpu {
         uint32 stride
     ) noexcept
     {
-        assert(commands && commands->render);
+        assert(commands && commands->render && commands->pso);
         emit_root_data(commands, root);
         const uint64 step = stride ? stride : 5 * sizeof(uint32);
         for (uint32 index = 0; index < draw_count; ++index)
-            [commands->render drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+            [commands->render drawIndexedPrimitives:commands->pso->primitive
                                           indexType:type == IndexType::uint16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
                                         indexBuffer:reinterpret_cast<uintptr>(indices.gpu)
                                   indexBufferLength:indices.size

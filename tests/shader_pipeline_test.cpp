@@ -1,5 +1,5 @@
 // End-to-end shader pipeline test: compute into GPU pointers, buffer and texture copies, texture/sampler handles read by
-// compute and fragment shaders, and a full-screen draw whose orientation must match on every backend.
+// compute and fragment shaders, a full-screen draw whose orientation must match on every backend, and line and strip topologies.
 #include "shader_pipeline_shared.h"
 #include <NoGraphicsAPI/NoGraphicsAPI.hpp>
 
@@ -187,6 +187,43 @@ static bool test_draw(Fixture& fixture, PSO* draw_pso, uint64 texture, uint64 sa
     return check(valid, sample_texture ? "fragment shader sampling through handles" : "full-screen draw covers the target with top-left uv origin");
 }
 
+// Draws one topology white over black, then checks the pixels the lines cross are lit and the pixels two away from them are not.
+// The lines' end pixels are left unchecked: the diamond-exit rule may or may not light them.
+static bool test_topology(Fixture& fixture, PSO* pso, Topology topology, uint32 first_point, uint32 point_count, const char* what) noexcept
+{
+    CommandBuffer* commands = begin(fixture);
+    const ColorAttachment color{ .render_view = fixture.target_view, .load = LoadOp::clear, .clear = { .x = 0, .y = 0, .z = 0, .w = 1 } };
+    begin_render_pass(commands, { .colors = { color } });
+    bind_pso(commands, pso);
+    draw(commands, LinesRoot{ .first_point = first_point }, point_count);
+    end_render_pass(commands);
+    barrier(commands, Stage::color_output, Access::color_write, Stage::transfer, Access::transfer_read);
+    copy_texture_to_memory(commands, fixture.target, { .gpu = fixture.readback.range.gpu, .size = pixel_count * 4 });
+    barrier(commands, Stage::transfer, Access::transfer_write, Stage::host, Access::host_read);
+    submit_and_wait(fixture, commands);
+
+    const byte* pixels = fixture.readback.range.cpu;
+    bool valid = true;
+    for (uint32 y = 0; y < pipeline_test_size; ++y)
+    {
+        for (uint32 x = 0; x < pipeline_test_size; ++x)
+        {
+            const bool lit = pixels[(y * pipeline_test_size + x) * 4] == 255;
+            const int32 row_distance = abs(static_cast<int32>(y) - 4);
+            const int32 column_distance = abs(static_cast<int32>(x) - 10);
+            if (topology == Topology::triangle_strip)
+                valid = valid && lit;
+            else if (topology == Topology::line_list)
+                valid = valid && (row_distance == 0 && x >= 1 && x <= 14 ? lit : row_distance >= 2 ? !lit : true);
+            else if ((row_distance == 0 && x >= 1 && x <= 9) || (column_distance == 0 && y >= 6 && y <= 14))
+                valid = valid && lit;
+            else if ((row_distance >= 2 || x >= 12) && (column_distance >= 2 || y <= 2))
+                valid = valid && !lit;
+        }
+    }
+    return check(valid, what);
+}
+
 int main()
 {
     Fixture fixture{};
@@ -204,7 +241,9 @@ int main()
     const ShaderFile read_file = read_shader(NOGRAPHICSAPI_PIPELINE_TEXTURE_SHADER);
     const ShaderFile vertex_file = read_shader(NOGRAPHICSAPI_PIPELINE_DRAW_VERTEX_SHADER);
     const ShaderFile fragment_file = read_shader(NOGRAPHICSAPI_PIPELINE_DRAW_FRAGMENT_SHADER);
-    if (!fill_file.size || !read_file.size || !vertex_file.size || !fragment_file.size)
+    const ShaderFile lines_vertex_file = read_shader(NOGRAPHICSAPI_PIPELINE_LINES_VERTEX_SHADER);
+    const ShaderFile lines_fragment_file = read_shader(NOGRAPHICSAPI_PIPELINE_LINES_FRAGMENT_SHADER);
+    if (!fill_file.size || !read_file.size || !vertex_file.size || !fragment_file.size || !lines_vertex_file.size || !lines_fragment_file.size)
     {
         fprintf(stderr, "Cannot read shader pipeline test shaders.\n");
         return 1;
@@ -269,12 +308,25 @@ int main()
         }
     );
 
+    PSO* line_list = create_graphics_pso(fixture.device, { .vertex = shader_code(lines_vertex_file), .fragment = shader_code(lines_fragment_file),
+                                                           .color_targets = { color_target }, .topology = Topology::line_list });
+    PSO* line_strip = create_graphics_pso(fixture.device, { .vertex = shader_code(lines_vertex_file), .fragment = shader_code(lines_fragment_file),
+                                                            .color_targets = { color_target }, .topology = Topology::line_strip });
+    PSO* triangle_strip = create_graphics_pso(fixture.device, { .vertex = shader_code(lines_vertex_file), .fragment = shader_code(lines_fragment_file),
+                                                                .color_targets = { color_target }, .topology = Topology::triangle_strip });
+
     bool passed = test_fill_and_copy(fixture, fill);
     passed = test_texture_handles(fixture, read, texture, sampler) && passed;
     passed = test_draw(fixture, draw_pso, texture, sampler, false) && passed;
     passed = test_draw(fixture, draw_pso, texture, sampler, true) && passed;
+    passed = test_topology(fixture, line_list, Topology::line_list, 0, 2, "a line list draws a one-pixel line") && passed;
+    passed = test_topology(fixture, line_strip, Topology::line_strip, 2, 3, "a line strip joins its points") && passed;
+    passed = test_topology(fixture, triangle_strip, Topology::triangle_strip, 5, 4, "a triangle strip's two triangles cover the target") && passed;
 
     wait_idle(fixture.device);
+    destroy_pso(triangle_strip);
+    destroy_pso(line_strip);
+    destroy_pso(line_list);
     destroy_pso(draw_pso);
     destroy_pso(read);
     destroy_pso(fill);
@@ -290,6 +342,8 @@ int main()
     destroy_timeline_semaphore(fixture.timeline);
     destroy_command_pool(fixture.pool);
     destroy_device(fixture.device);
+    free(lines_fragment_file.data);
+    free(lines_vertex_file.data);
     free(fragment_file.data);
     free(vertex_file.data);
     free(read_file.data);
