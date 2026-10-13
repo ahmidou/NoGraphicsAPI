@@ -70,6 +70,12 @@ if(APPLE)
         SKIP_RETURN_CODE 77 TIMEOUT 60 ENVIRONMENT "MTL_DEBUG_LAYER=1;MTL_SHADER_VALIDATION=1;MTL_SHADER_VALIDATION_REPORT_TO_STDERR=1")
     set_tests_properties(test_native_interop test_native_interop_texture_residency test_native_interop_same_queue PROPERTIES FAIL_REGULAR_EXPRESSION "Invalid Metal usage")
     set_tests_properties(test_native_interop_no_residency PROPERTIES PASS_REGULAR_EXPRESSION "Texture is not resident")
+
+    add_executable(test_command_context command_context_test.cpp)
+    NoGraphicsAPI_disable_exceptions(test_command_context)
+    target_link_libraries(test_command_context PRIVATE NoGraphicsAPI::NoGraphicsAPI)
+    add_test(NAME test_timestamps COMMAND test_command_context --timestamps)
+    set_tests_properties(test_timestamps PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60 ENVIRONMENT "MTL_DEBUG_LAYER=1" FAIL_REGULAR_EXPRESSION "Invalid Metal usage")
     return()
 endif()
 

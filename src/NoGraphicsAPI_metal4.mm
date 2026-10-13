@@ -137,6 +137,7 @@ namespace gpu {
         Array<DepthStencilRecord> depth_stencil_states;
         DeviceCaps caps{};
         char device_name[256]{};
+        uint32 timestamp_query_count = 0;
     };
 
     struct TimelineSemaphore
@@ -180,6 +181,12 @@ namespace gpu {
         // Stages of barrier() calls recorded so far in this command buffer; every encoder opened later waits on them.
         MTLStages barrier_source = 0;
         MTLStages barrier_destination = 0;
+        // write_timestamp writes heap entry i for destination i; end_commands resolves the entries into the destinations.
+        id<MTL4CounterHeap> timestamps = nil; // Created by the first write_timestamp, with DeviceDesc::timestamp_query_count entries.
+        Array<uint64> timestamp_destinations; // GPU addresses.
+        // Updated at the end of each encoder that wrote timestamps; the resolves wait for it, as Metal 4 orders nothing between encoders.
+        id<MTLFence> timestamp_fence = nil;
+        bool timestamp_fence_pending = false;
         bool swapchain = false;
         CommandBuffer* next = nullptr;
     };
@@ -476,6 +483,9 @@ namespace gpu {
         {
             if (!commands->compute)
                 return;
+            if (commands->timestamp_fence_pending)
+                [commands->compute updateFence:commands->timestamp_fence afterEncoderStages:compute_encoder_stages];
+            commands->timestamp_fence_pending = false;
             [commands->compute endEncoding];
             commands->compute = nil;
         }
@@ -642,6 +652,7 @@ namespace gpu {
                 [device->queues[index] addResidencySet:device->residency];
             }
             device->queue_count = requested;
+            device->timestamp_query_count = desc.timestamp_query_count;
 
             if (desc.window)
             {
@@ -666,7 +677,7 @@ namespace gpu {
                 .texture_heap_alignment = texture_heap_alignment,
                 .texture_descriptor_size = descriptor_size,
                 .sampler_descriptor_size = descriptor_size,
-                .timestamp_period_ns = 1.0f,
+                .timestamp_period_ns = 1e9f / [mtl_device queryTimestampFrequency],
                 .sub_texel_precision_bits = 8,
                 .texture_compression_bc = mtl_device.supportsBCTextureCompression,
                 .texture_compression_astc = [mtl_device supportsFamily:MTLGPUFamilyApple2],
@@ -1191,6 +1202,7 @@ namespace gpu {
         commands->pso = nullptr;
         commands->barrier_source = 0;
         commands->barrier_destination = 0;
+        commands->timestamp_destinations.size = 0;
         [commands->command_buffer beginCommandBufferWithAllocator:pool->allocator];
         return commands;
     }
@@ -1199,6 +1211,18 @@ namespace gpu {
     {
         assert(commands && !commands->render && "end the render pass before ending the command buffer");
         end_compute_encoder(commands);
+        // One resolve per run of timestamps with consecutive destinations.
+        const Array<uint64>& destinations = commands->timestamp_destinations;
+        for (uint32 first = 0, last = 1; first < destinations.size; first = last++)
+        {
+            while (last < destinations.size && destinations.data[last] == destinations.data[last - 1] + sizeof(uint64))
+                ++last;
+            [commands->command_buffer resolveCounterHeap:commands->timestamps
+                                               withRange:NSMakeRange(first, last - first)
+                                              intoBuffer:MTL4BufferRangeMake(destinations.data[first], (last - first) * sizeof(uint64))
+                                               waitFence:commands->timestamp_fence
+                                             updateFence:nil];
+        }
         [commands->command_buffer endCommandBuffer];
     }
 
@@ -1222,9 +1246,44 @@ namespace gpu {
         assert(commands && heap.gpu);
     }
 
-    void write_timestamp(CommandBuffer* commands, uint64* gpu_destination, Stage) noexcept
+    // Encoder timestamps are precise. Outside encoders the command buffer writes them: an encoder holding nothing but a timestamp writes 0.
+    // ponytail: those command-buffer timestamps have no fence for the resolves to wait on; they rely on resolves running after them in
+    // command-buffer order, as they did in every probe on an M4 Max and in test_timestamps. A fenced compute encoder is the upgrade if a GPU reorders.
+    void write_timestamp(CommandBuffer* commands, uint64* gpu_destination, Stage stage) noexcept
     {
-        assert(commands && gpu_destination);
+        assert(commands && gpu_destination && reinterpret_cast<uintptr>(gpu_destination) % sizeof(uint64) == 0);
+        Device* device = commands->device;
+        if (!device->timestamp_query_count)
+            return;
+        assert(commands->timestamp_destinations.size < device->timestamp_query_count);
+        if (!commands->timestamps)
+        {
+            MTL4CounterHeapDescriptor* desc = [MTL4CounterHeapDescriptor new];
+            desc.type = MTL4CounterHeapTypeTimestamp;
+            desc.count = device->timestamp_query_count;
+            commands->timestamps = [device->device newCounterHeapWithDescriptor:desc error:nil];
+            commands->timestamp_fence = [device->device newFence];
+        }
+        const uint32 index = commands->timestamp_destinations.size;
+        commands->timestamp_destinations.push() = reinterpret_cast<uint64>(gpu_destination);
+        if (commands->render)
+        {
+            const MTLRenderStages after = stage == Stage::vertex || stage == Stage::index_input ? MTLRenderStageVertex
+                                          : stage == Stage::task                                ? MTLRenderStageObject
+                                          : stage == Stage::mesh                                ? MTLRenderStageMesh
+                                                                                                : MTLRenderStageFragment;
+            [commands->render writeTimestampWithGranularity:MTL4TimestampGranularityPrecise afterStage:after intoHeap:commands->timestamps atIndex:index];
+            commands->timestamp_fence_pending = true;
+        }
+        else if (commands->compute)
+        {
+            [commands->compute writeTimestampWithGranularity:MTL4TimestampGranularityPrecise intoHeap:commands->timestamps atIndex:index];
+            commands->timestamp_fence_pending = true;
+        }
+        else
+        {
+            [commands->command_buffer writeTimestampIntoHeap:commands->timestamps atIndex:index];
+        }
     }
 
     void barrier(CommandBuffer* commands, Stage before, Access, Stage after, Access) noexcept
@@ -1399,6 +1458,9 @@ namespace gpu {
     void end_render_pass(CommandBuffer* commands) noexcept
     {
         assert(commands && commands->render);
+        if (commands->timestamp_fence_pending)
+            [commands->render updateFence:commands->timestamp_fence afterEncoderStages:render_encoder_stages];
+        commands->timestamp_fence_pending = false;
         [commands->render endEncoding];
         commands->render = nil;
     }

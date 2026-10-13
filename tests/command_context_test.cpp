@@ -556,6 +556,8 @@ int main(int argc, char** argv)
 {
     if (argc == 2 && strcmp(argv[1], "--timestamps-unavailable") == 0)
         return test_without_timestamps(256) ? 0 : 1;
+    // Only the timestamp tests, which hold on Metal too; the others check Vulkan behavior.
+    const bool timestamps_only = argc == 2 && strcmp(argv[1], "--timestamps") == 0;
 
     const gpu::DeviceInit device_init = gpu::create_device();
     if (device_init.error == gpu::Error::unsupported)
@@ -567,14 +569,15 @@ int main(int argc, char** argv)
     const gpu::DeviceCaps& caps = gpu::get_device_caps(device);
     gpu::TimelineSemaphore* timeline = gpu::create_timeline_semaphore(device);
     uint64 next_timeline_value = 0;
-    const bool valid = caps.texture_heap_alignment != 0 &&
-                       (caps.texture_heap_alignment & (caps.texture_heap_alignment - 1)) == 0 &&
-                       caps.texture_descriptor_size != 0 && caps.sampler_descriptor_size != 0 &&
-                       test_gpu_heaps(device) &&
-                       test_descriptor_heaps(device, caps, timeline, next_timeline_value) &&
-                       test_placed_textures(device, caps, timeline, next_timeline_value) &&
+    const bool valid = (timestamps_only ||
+                        (caps.texture_heap_alignment != 0 &&
+                         (caps.texture_heap_alignment & (caps.texture_heap_alignment - 1)) == 0 &&
+                         caps.texture_descriptor_size != 0 && caps.sampler_descriptor_size != 0 &&
+                         test_gpu_heaps(device) &&
+                         test_descriptor_heaps(device, caps, timeline, next_timeline_value) &&
+                         test_placed_textures(device, caps, timeline, next_timeline_value))) &&
                        test_timestamp_readback(device, timeline, next_timeline_value) &&
-                       test_batch_growth_and_reuse(device, timeline, next_timeline_value);
+                       (timestamps_only || test_batch_growth_and_reuse(device, timeline, next_timeline_value));
     gpu::wait_idle(device);
     gpu::destroy_timeline_semaphore(timeline);
     gpu::destroy_device(device);

@@ -224,6 +224,33 @@ static bool test_topology(Fixture& fixture, PSO* pso, Topology topology, uint32 
     return check(valid, what);
 }
 
+// Timestamps from the command buffer, a compute encoder and a render pass all land. The render pass may overlap the dispatch, so
+// only the command buffer's first and last timestamps bound the encoders' ones.
+static bool test_timestamps(Fixture& fixture, PSO* fill, PSO* draw_pso) noexcept
+{
+    uint64* ticks = reinterpret_cast<uint64*>(fixture.readback.range.cpu);
+    uint64* destination = reinterpret_cast<uint64*>(fixture.readback.range.gpu);
+    memset(ticks, 0, 4 * sizeof(uint64));
+    CommandBuffer* commands = begin(fixture);
+    write_timestamp(commands, destination);
+    bind_pso(commands, fill);
+    const FillRoot root{ .destination = reinterpret_cast<uint32*>(fixture.upload.range.gpu), .count = fill_count };
+    dispatch(commands, root, { .x = fill_count / fill_group_size, .y = 1, .z = 1 });
+    write_timestamp(commands, destination + 1, Stage::compute);
+    const ColorAttachment color{ .render_view = fixture.target_view, .load = LoadOp::clear };
+    begin_render_pass(commands, { .colors = { color } });
+    bind_pso(commands, draw_pso);
+    draw(commands, DrawRoot{}, 3);
+    write_timestamp(commands, destination + 2, Stage::color_output);
+    end_render_pass(commands);
+    write_timestamp(commands, destination + 3);
+    submit_and_wait(fixture, commands);
+    // All four stay 0 where the queue has no timestamps (Vulkan needs 64 valid bits).
+    const bool none = !(ticks[0] | ticks[1] | ticks[2] | ticks[3]);
+    return check(none || (ticks[0] && ticks[0] <= ticks[1] && ticks[1] <= ticks[3] && ticks[0] <= ticks[2] && ticks[2] <= ticks[3]),
+                 "timestamps from the command buffer, a compute encoder and a render pass");
+}
+
 int main()
 {
     Fixture fixture{};
@@ -319,6 +346,7 @@ int main()
     passed = test_texture_handles(fixture, read, texture, sampler) && passed;
     passed = test_draw(fixture, draw_pso, texture, sampler, false) && passed;
     passed = test_draw(fixture, draw_pso, texture, sampler, true) && passed;
+    passed = test_timestamps(fixture, fill, draw_pso) && passed;
     passed = test_topology(fixture, line_list, Topology::line_list, 0, 2, "a line list draws a one-pixel line") && passed;
     passed = test_topology(fixture, line_strip, Topology::line_strip, 2, 3, "a line strip joins its points") && passed;
     passed = test_topology(fixture, triangle_strip, Topology::triangle_strip, 5, 4, "a triangle strip's two triangles cover the target") && passed;

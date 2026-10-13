@@ -29,6 +29,10 @@ Status: a first Metal 4 backend exists in this fork (`src/NoGraphicsAPI_metal4.m
 - **Copies need buffer objects**, so GPU heaps are found by address in a device registry: heap creation/destruction is not safe
   concurrently with other heap creation/destruction or with recording copies.
 - The Metal viewport is flipped so the same clip-space output covers the same pixels as on Vulkan.
+- **Timestamps** go into a per-command-buffer `MTL4CounterHeap` that `end_commands` resolves into the destinations. Inside an encoder they
+  are precise (a render pass's after the stage `write_timestamp` names); outside one the command buffer writes them, as an encoder holding
+  only a timestamp writes 0. Ticks are `queryTimestampFrequency` (24 MHz on Apple silicon: the `mach_absolute_time` domain, so CPU and
+  GPU times compare without calibration).
 
 
 This document asks whether a Metal 4 backend can preserve the important ideas from
