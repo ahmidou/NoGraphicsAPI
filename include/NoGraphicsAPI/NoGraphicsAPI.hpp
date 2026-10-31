@@ -756,6 +756,21 @@ void write_sampler_descriptor(SamplerDescriptorHeap* heap, uint32 index, const S
 void copy_sampler_descriptors(const SamplerDescriptorHeap* source, uint32 source_index, SamplerDescriptorHeap* destination,
                               uint32 destination_index, uint32 count) noexcept;
 
+// Native objects, for interop with code that talks to the platform API directly (a UI renderer sampling a
+// texture NoGraphicsAPI rendered, and waiting for it). Borrowed, not retained; valid while the object lives.
+// Metal: id<MTLTexture> / id<MTLSharedEvent> / id<MTLResidencySet>. Vulkan: VkImage / VkSemaphore (timeline) / nullptr.
+// Metal residency is per queue: another queue using a NoGraphicsAPI texture must add the device residency set (addResidencySet:)
+// or the texture itself to one of its own sets.
+[[nodiscard]] void* get_native_texture(const Texture* texture) noexcept;
+[[nodiscard]] void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept;
+[[nodiscard]] void* get_native_residency_set(const Device* device) noexcept;
+// The queue itself, for a foreign renderer submitting on it instead of on a queue of its own: Metal id<MTL4CommandQueue>, Vulkan VkQueue.
+// Externally synchronized like the queue: serialize foreign use with this queue_index's submits, waits and wait_idle. Nothing orders
+// work between command buffers, so a foreign user orders its work against NoGraphicsAPI's with the platform's barriers, as barrier() does:
+// on Metal, a consumer barrier (barrierAfterQueueStages:beforeStages:visibilityOptions:) in each encoder that consumes earlier queue work.
+// The device residency set is already on the queue. queue_index must be less than DeviceCaps::queue_count.
+[[nodiscard]] void* get_native_queue(Device* device, uint32 queue_index = 0) noexcept;
+
 [[nodiscard]] PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept;
 [[nodiscard]] PSO* create_compute_pso(Device* device, const ShaderStage& compute) noexcept;

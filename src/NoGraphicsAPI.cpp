@@ -2923,6 +2923,30 @@ void copy_sampler_descriptors(const SamplerDescriptorHeap* source, uint32 source
            destination->descriptors + uint64(destination_index) * stride, size_t(count * stride));
 }
 
+// Non-dispatchable handles are pointers on the 64-bit targets NoGraphicsAPI requires.
+void* get_native_texture(const Texture* texture) noexcept
+{
+    assert(texture);
+    return texture->image;
+}
+
+void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept
+{
+    assert(semaphore);
+    return semaphore->semaphore;
+}
+
+void* get_native_residency_set(const Device*) noexcept
+{
+    return nullptr;
+}
+
+void* get_native_queue(Device* device, uint32 queue_index) noexcept
+{
+    assert(device && queue_index < device->queue_count);
+    return device->queues[queue_index].queue;
+}
+
 void write_texture_descriptor(TextureDescriptorHeap* heap, uint32 index, const Texture* texture, TextureDescriptorType type,
                               const TextureDescriptorDesc& desc) noexcept
 {

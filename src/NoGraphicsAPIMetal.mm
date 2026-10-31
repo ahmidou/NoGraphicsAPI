@@ -1047,6 +1047,30 @@ void copy_sampler_descriptors(const SamplerDescriptorHeap* source, uint32 source
     }
 }
 
+void* get_native_texture(const Texture* texture) noexcept
+{
+    assert(texture);
+    return texture->texture;
+}
+
+void* get_native_timeline_semaphore(const TimelineSemaphore* semaphore) noexcept
+{
+    assert(semaphore);
+    return semaphore->event;
+}
+
+void* get_native_residency_set(const Device* device) noexcept
+{
+    assert(device);
+    return device->residency;
+}
+
+void* get_native_queue(Device* device, uint32 queue_index) noexcept
+{
+    assert(device && queue_index < device->caps.queue_count);
+    return device->queues[queue_index].queue;
+}
+
 namespace
 {
 MTL4LibraryFunctionDescriptor* shader_function(Device* device, const ShaderStage& stage)
