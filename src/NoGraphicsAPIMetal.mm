@@ -953,6 +953,12 @@ void write_texture_descriptor(TextureDescriptorHeap* heap, uint32 index, const T
     }
 }
 
+uint64 get_texture_handle(const TextureDescriptorHeap* heap, uint32 index) noexcept
+{
+    assert(heap && index < heap->capacity);
+    return heap->pool.baseResourceID._impl + index;
+}
+
 void copy_texture_descriptors(const TextureDescriptorHeap* source, uint32 source_index, TextureDescriptorHeap* destination,
                               uint32 destination_index, uint32 count) noexcept
 {

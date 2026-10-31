@@ -760,6 +760,9 @@ void write_texture_descriptor(TextureDescriptorHeap* heap, uint32 index, const T
                               const TextureDescriptorDesc& desc = {}) noexcept;
 void copy_texture_descriptors(const TextureDescriptorHeap* source, uint32 source_index, TextureDescriptorHeap* destination,
                               uint32 destination_index, uint32 count) noexcept;
+// Shader-visible handle of a slot, for Slang `.Handle` fields (DescriptorHandle<T>) in roots and GPU memory, as an alternative to
+// gpu_texture<T>(index): the slot index on Vulkan, the texture view pool's resource ID (baseResourceID + index) on Metal.
+[[nodiscard]] uint64 get_texture_handle(const TextureDescriptorHeap* heap, uint32 index) noexcept;
 [[nodiscard]] SamplerDescriptorHeap* create_sampler_descriptor_heap(Device* device, uint32 capacity) noexcept;
 void destroy_sampler_descriptor_heap(SamplerDescriptorHeap* heap) noexcept;
 void write_sampler_descriptor(SamplerDescriptorHeap* heap, uint32 index, const SamplerDesc& desc = {}) noexcept;

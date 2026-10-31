@@ -2923,6 +2923,13 @@ void copy_sampler_descriptors(const SamplerDescriptorHeap* source, uint32 source
            destination->descriptors + uint64(destination_index) * stride, size_t(count * stride));
 }
 
+// Slang's DescriptorHandle<T> on SPV_EXT_descriptor_heap holds uint2(index, 0), as gpu_texture<T>(index) builds it.
+uint64 get_texture_handle(const TextureDescriptorHeap* heap, uint32 index) noexcept
+{
+    assert(heap && index < heap->capacity);
+    return index;
+}
+
 // Non-dispatchable handles are pointers on the 64-bit targets NoGraphicsAPI requires.
 void* get_native_texture(const Texture* texture) noexcept
 {
