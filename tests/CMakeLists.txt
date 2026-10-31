@@ -119,6 +119,21 @@ set(continuation_vertex_spv ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_continuat
 set(continuation_fragment_spv ${CMAKE_CURRENT_BINARY_DIR}/shaders/render_continuation.frag.${NOGRAPHICSAPI_SHADER_EXTENSION})
 NoGraphicsAPI_compile_slang(${continuation_vertex_spv} ${CMAKE_CURRENT_SOURCE_DIR}/render_continuation.slang vertexMain vertex)
 NoGraphicsAPI_compile_slang(${continuation_fragment_spv} ${CMAKE_CURRENT_SOURCE_DIR}/render_continuation.slang fragmentMain fragment)
+set(topology_vertex_code ${CMAKE_CURRENT_BINARY_DIR}/shaders/topology.vert.${NOGRAPHICSAPI_SHADER_EXTENSION})
+set(topology_fragment_code ${CMAKE_CURRENT_BINARY_DIR}/shaders/topology.frag.${NOGRAPHICSAPI_SHADER_EXTENSION})
+NoGraphicsAPI_compile_slang(${topology_vertex_code} ${CMAKE_CURRENT_SOURCE_DIR}/topology.slang vertexMain vertex
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/topology_shared.h)
+NoGraphicsAPI_compile_slang(${topology_fragment_code} ${CMAKE_CURRENT_SOURCE_DIR}/topology.slang fragmentMain fragment
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/topology_shared.h)
+add_executable(test_topology topology_test.cpp ${topology_vertex_code} ${topology_fragment_code})
+NoGraphicsAPI_disable_exceptions(test_topology)
+target_link_libraries(test_topology PRIVATE NoGraphicsAPI::NoGraphicsAPI NoGraphicsAPIUtility::types)
+target_compile_definitions(test_topology PRIVATE
+    NOGRAPHICSAPI_TOPOLOGY_VERTEX_SHADER="${topology_vertex_code}" NOGRAPHICSAPI_TOPOLOGY_FRAGMENT_SHADER="${topology_fragment_code}")
+add_test(NAME test_topology COMMAND test_topology)
+set_tests_properties(test_topology PROPERTIES
+    SKIP_RETURN_CODE 77 TIMEOUT 60 FAIL_REGULAR_EXPRESSION "Validation Error;NoGraphicsAPI validation:")
+
 add_executable(test_render_continuation render_continuation_test.cpp ${continuation_vertex_spv} ${continuation_fragment_spv})
 NoGraphicsAPI_disable_exceptions(test_render_continuation)
 target_link_libraries(test_render_continuation PRIVATE NoGraphicsAPI::NoGraphicsAPI Threads::Threads)

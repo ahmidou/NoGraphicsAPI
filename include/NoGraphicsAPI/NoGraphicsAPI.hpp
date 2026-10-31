@@ -327,6 +327,15 @@ enum class CullMode : uint8
     counter_clockwise,
 };
 
+// Lines rasterize one pixel wide, without antialiasing.
+enum class Topology : uint8
+{
+    triangle_list,
+    triangle_strip,
+    line_list,
+    line_strip,
+};
+
 enum class BlendFactor : uint8
 {
     zero,
@@ -620,6 +629,7 @@ struct GraphicsPSODesc
     Format depth_format = Format::undefined;
     Format stencil_format = Format::undefined;
     RasterizationState rasterization = {};
+    Topology topology = Topology::triangle_list;
 };
 
 struct MeshPSODesc

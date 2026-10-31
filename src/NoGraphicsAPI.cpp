@@ -3050,7 +3050,7 @@ constexpr VkDescriptorSetAndBindingMappingEXT root_mapping{
 };
 
 PSO* create_raster_pso(Device* device, const ShaderStage& first_stage, const ShaderStage& fragment, Span<const ColorTargetDesc> color_targets,
-                       Format depth_format, Format stencil_format, const RasterizationState& rasterization_state,
+                       Format depth_format, Format stencil_format, const RasterizationState& rasterization_state, Topology topology,
                        bool mesh, const ShaderStage& task = {}) noexcept
 {
     assert(device && "PSO creation called with a null device");
@@ -3106,9 +3106,11 @@ PSO* create_raster_pso(Device* device, const ShaderStage& first_stage, const Sha
     const VkPipelineVertexInputStateCreateInfo vertex_input{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     };
+    const VkPrimitiveTopology topologies[] = {VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+                                              VK_PRIMITIVE_TOPOLOGY_LINE_LIST, VK_PRIMITIVE_TOPOLOGY_LINE_STRIP};
     const VkPipelineInputAssemblyStateCreateInfo input_assembly{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .topology = topologies[static_cast<uint32>(topology)],
     };
     const VkPipelineViewportStateCreateInfo viewport_state{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -3219,13 +3221,13 @@ PSO* create_raster_pso(Device* device, const ShaderStage& first_stage, const Sha
 PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept
 {
     return create_raster_pso(device, desc.vertex, desc.fragment, desc.color_targets, desc.depth_format,
-                             desc.stencil_format, desc.rasterization, false);
+                             desc.stencil_format, desc.rasterization, desc.topology, false);
 }
 
 PSO* create_mesh_pso(Device* device, const MeshPSODesc& desc) noexcept
 {
     return create_raster_pso(device, desc.mesh, desc.fragment, desc.color_targets, desc.depth_format,
-                             desc.stencil_format, desc.rasterization, true, desc.task);
+                             desc.stencil_format, desc.rasterization, Topology::triangle_list, true, desc.task);
 }
 
 PSO* create_compute_pso(Device* device, const ShaderStage& compute) noexcept

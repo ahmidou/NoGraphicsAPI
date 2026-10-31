@@ -213,6 +213,7 @@ struct PSO
     RasterizationState rasterization = {};
     MTLSize threads = {1, 1, 1};
     MTLSize object_threads = {1, 1, 1};
+    MTLPrimitiveType primitive = MTLPrimitiveTypeTriangle;
     bool mesh = false;
 };
 
@@ -1134,7 +1135,8 @@ PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept
         }
         pipeline.vertexFunctionDescriptor = vertex;
         pipeline.fragmentFunctionDescriptor = fragment;
-        pipeline.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+        const bool lines = desc.topology == Topology::line_list || desc.topology == Topology::line_strip;
+        pipeline.inputPrimitiveTopology = lines ? MTLPrimitiveTopologyClassLine : MTLPrimitiveTopologyClassTriangle;
         color_targets(pipeline.colorAttachments, desc.color_targets);
         NSError* error = nil;
         id<MTLRenderPipelineState> state = [device->compiler newRenderPipelineStateWithDescriptor:pipeline compilerTaskOptions:nil error:&error];
@@ -1143,7 +1145,9 @@ PSO* create_graphics_pso(Device* device, const GraphicsPSODesc& desc) noexcept
         [pipeline release];
         if (!state) { report_error("graphics pipeline", error); return nullptr; }
         add_resident(device, state);
-        return new PSO{.device = device, .render = state, .rasterization = desc.rasterization};
+        const MTLPrimitiveType primitives[] = {MTLPrimitiveTypeTriangle, MTLPrimitiveTypeTriangleStrip, MTLPrimitiveTypeLine, MTLPrimitiveTypeLineStrip};
+        return new PSO{.device = device, .render = state, .rasterization = desc.rasterization,
+                       .primitive = primitives[static_cast<uint32>(desc.topology)]};
     }
 }
 
@@ -1781,7 +1785,7 @@ void draw(CommandBuffer* commands, const void* root, uint32 vertex_count, uint32
     {
         assert(commands->render && commands->pso && !commands->pso->mesh);
         root_data(commands, root);
-        [commands->render drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:first_vertex vertexCount:vertex_count instanceCount:instance_count
+        [commands->render drawPrimitives:commands->pso->primitive vertexStart:first_vertex vertexCount:vertex_count instanceCount:instance_count
                            baseInstance:first_instance];
     }
 }
@@ -1794,7 +1798,7 @@ void draw_indexed(CommandBuffer* commands, const void* root, GpuRange indices, I
         assert(commands->render && commands->pso && !commands->pso->mesh);
         root_data(commands, root);
         const uint64 offset = first_index * (type == IndexType::uint16 ? 2u : 4u);
-        [commands->render drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:index_count
+        [commands->render drawIndexedPrimitives:commands->pso->primitive indexCount:index_count
                                      indexType:type == IndexType::uint16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
                                    indexBuffer:reinterpret_cast<uintptr>(indices.gpu) + offset indexBufferLength:indices.size - offset
                                  instanceCount:instance_count baseVertex:vertex_offset baseInstance:first_instance];
@@ -1809,7 +1813,7 @@ void draw_indirect(CommandBuffer* commands, const void* root, GpuRange arguments
         root_data(commands, root);
         if (!stride) stride = sizeof(MTLDrawPrimitivesIndirectArguments);
         for (uint32 i = 0; i < draw_count; ++i)
-            [commands->render drawPrimitives:MTLPrimitiveTypeTriangle
+            [commands->render drawPrimitives:commands->pso->primitive
                              indirectBuffer:reinterpret_cast<uintptr>(arguments.gpu) + i * stride];
     }
 }
@@ -1823,7 +1827,7 @@ void draw_indexed_indirect(CommandBuffer* commands, const void* root, GpuRange i
         root_data(commands, root);
         if (!stride) stride = sizeof(MTLDrawIndexedPrimitivesIndirectArguments);
         for (uint32 i = 0; i < draw_count; ++i)
-            [commands->render drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexType:type == IndexType::uint16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
+            [commands->render drawIndexedPrimitives:commands->pso->primitive indexType:type == IndexType::uint16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
                                        indexBuffer:reinterpret_cast<uintptr>(indices.gpu) indexBufferLength:indices.size
                                     indirectBuffer:reinterpret_cast<uintptr>(arguments.gpu) + i * stride];
     }
