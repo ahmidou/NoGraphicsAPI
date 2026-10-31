@@ -97,6 +97,16 @@ int main()
     records[0] = map.insert(0x1000, 512, 999);
     valid = resolve(map, 0x1000, 1, 999, 511) && valid;
     map.remove(records[0]);
+    // Every slot fills, then a full map refuses the next insert and keeps resolving.
+    static gpu::detail::BufferRecord* all[gpu::detail::BufferAddressMap::capacity] = {};
+    for (uint32 i = 0; i < gpu::detail::BufferAddressMap::capacity; ++i)
+    {
+        all[i] = map.insert(0x100000 + uint64(i) * 0x1000, 256, i + 1);
+        valid = all[i] != nullptr && valid;
+    }
+    valid = map.insert(0x10, 16, 1) == nullptr && valid;
+    valid = resolve(map, 0x100000 + 1000 * 0x1000, 256, 1001, 0) && valid;
+    for (uint32 i = 0; i < gpu::detail::BufferAddressMap::capacity; ++i) map.remove(all[i]);
     printf("Buffer address offsets, capacity, reuse and concurrent lookup: %s\n", valid ? "passed" : "failed");
     return valid ? 0 : 1;
 }
