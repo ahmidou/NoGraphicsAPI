@@ -57,7 +57,7 @@ provide addressable data storage. Opaque texture and sampler descriptor heaps us
 `GpuCpuRange<T>::size` is always bytes, regardless of `T`, and a GPU-only heap has a null CPU pointer.
 
 When device-address commands are unavailable, index, indirect and copy operations resolve addresses through
-the same table used by Metal. Each command range must fit in one GPU heap; at most 64 GPU heaps may be live
+the same table used by Metal. Each command range must fit in one GPU heap; at most 4096 GPU heaps may be live
 per device. Lookups use binary search with atomic version checks; only table updates serialize.
 Devices with the extension pass command addresses directly and do not allocate the table.
 

@@ -726,7 +726,7 @@ void wait_idle(Device* device) noexcept;
 void submit_and_present(Device* device, const SubmitDesc& desc) noexcept;
 
 // Every non-null returned pointer is 16-byte aligned. GPU heaps are raw blocks for application-side suballocation.
-// Metal and Vulkan without device-address commands support at most 64 live GPU heaps per device.
+// Metal and Vulkan without device-address commands support at most 4096 live GPU heaps per device; past it, creation fails.
 [[nodiscard]] GpuHeap create_gpu_heap(Device* device, uint64 byte_count, MemoryType memory = MemoryType::cpu_visible) noexcept;
 void destroy_gpu_heap(const GpuHeap& heap) noexcept;
 

@@ -65,11 +65,14 @@ struct BufferRecord
 
 struct BufferAddressMap
 {
-    BufferRecord records[64] = {};
-    uint64 indices[64] = {};
+    // Live GPU heaps per device: an application keeping a heap per mesh needs thousands.
+    static constexpr uint32 capacity = 4096;
+
+    BufferRecord records[capacity] = {};
+    uint64 indices[capacity] = {};
     uint64 sequence = 0;
     uint64 count = 0;
-    uint64 occupied = 0;
+    uint64 occupied[capacity / 64] = {};
 
     uint64 begin_update() noexcept
     {
@@ -86,13 +89,22 @@ struct BufferAddressMap
         }
     }
 
+    // Null when the map is full.
     BufferRecord* insert(uint64 base, uint64 size, uint64 buffer) noexcept
     {
         const uint64 previous = begin_update();
-        assert(occupied != ~uint64{0});
-        const uint32 slot = static_cast<uint32>(~occupied) ? count_trailing_zeros(static_cast<uint32>(~occupied))
-                                                          : 32 + count_trailing_zeros(static_cast<uint32>(~occupied >> 32));
-        occupied |= uint64{1} << slot;
+        uint32 word = 0;
+        while (word < capacity / 64 && occupied[word] == ~uint64{0}) ++word;
+        if (word == capacity / 64)
+        {
+            buffer_atomic_store(&sequence, previous + 2, true);
+            return nullptr;
+        }
+        const uint64 available = ~occupied[word];
+        const uint32 bit = static_cast<uint32>(available) ? count_trailing_zeros(static_cast<uint32>(available))
+                                                          : 32 + count_trailing_zeros(static_cast<uint32>(available >> 32));
+        occupied[word] |= uint64{1} << bit;
+        const uint32 slot = word * 64 + bit;
         buffer_atomic_store(&records[slot].base, base);
         buffer_atomic_store(&records[slot].size, size);
         buffer_atomic_store(&records[slot].buffer, buffer);
@@ -117,7 +129,8 @@ struct BufferAddressMap
         assert(index < size);
         for (; index + 1 < size; ++index) buffer_atomic_store(&indices[index], buffer_atomic_load(&indices[index + 1]));
         buffer_atomic_store(&count, size - 1);
-        occupied &= ~(uint64{1} << (record - records));
+        const uint64 slot = static_cast<uint64>(record - records);
+        occupied[slot / 64] &= ~(uint64{1} << (slot % 64));
         buffer_atomic_store(&sequence, previous + 2, true);
     }
 

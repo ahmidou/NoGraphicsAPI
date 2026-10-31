@@ -1275,7 +1275,19 @@ GpuHeap Device::allocate_gpu_heap(VkDeviceSize size, MemoryType memory) noexcept
         delete heap;
         return {};
     }
-    if (buffer_map) heap->record = buffer_map->insert(heap->backing.address, size, reinterpret_cast<uintptr>(heap->backing.buffer));
+    if (buffer_map)
+    {
+        heap->record = buffer_map->insert(heap->backing.address, size, reinterpret_cast<uintptr>(heap->backing.buffer));
+        if (!heap->record)
+        {
+            if (error_callback) error_callback("GPU heap address table is full", false);
+            if (heap->backing.mapped) vkUnmapMemory(device, heap->backing.memory);
+            vkDestroyBuffer(device, heap->backing.buffer, nullptr);
+            vkFreeMemory(device, heap->backing.memory, nullptr);
+            delete heap;
+            return {};
+        }
+    }
     return {
         .range = {
             .cpu = static_cast<byte*>(heap->backing.mapped),

@@ -783,6 +783,14 @@ GpuHeap create_gpu_heap(Device* device, uint64 byte_count, MemoryType memory) no
             return {};
         }
         owner->record = device->buffer_map.insert(owner->buffer.gpuAddress, byte_count, reinterpret_cast<uintptr>(owner->buffer));
+        if (!owner->record)
+        {
+            report_error("GPU heap address table is full", nil);
+            [owner->buffer release];
+            [owner->heap release];
+            delete owner;
+            return {};
+        }
         add_resident(device, device->shader_validation ? (id<MTLAllocation>)owner->buffer : (id<MTLAllocation>)owner->heap);
         return {.range = {.cpu = memory == MemoryType::gpu_only ? nullptr : static_cast<byte*>(owner->buffer.contents),
                           .gpu = reinterpret_cast<byte*>(owner->buffer.gpuAddress), .size = byte_count},
