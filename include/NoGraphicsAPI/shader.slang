@@ -6,17 +6,10 @@
 #ifdef NOGRAPHICSAPI_METAL
 
 #define GPU_ROOT_DEFAULT(type, name) GPU_ROOT_IMPL(type, name, 16)
-#define GPU_ROOT_IMPL(type, name, alignment) \
-    [[vk::binding(0)]] ConstantBuffer<type> name##_storage : register(b0); \
-    static type name = gpu_root_aligned_storage(name##_storage, alignment)
+// Read in place from the constant address space, so each entry point loads only the fields it uses; a copy into
+// thread storage loads them all. Binding asserts the address alignment; alignment adds no assumption here.
+#define GPU_ROOT_IMPL(type, name, alignment) [[vk::binding(0)]] ConstantBuffer<type> name : register(b0)
 #define GPU_ADDRESS(value) __getAddress(value)
-
-[ForceInline]
-ConstantBuffer<T> gpu_root_aligned_storage<T>(ConstantBuffer<T> storage, constexpr int alignment)
-{
-    static_assert(sizeof(T) % 16 == 0, "Root structs require a 16-byte stride and native vector alignment; pointed-to data uses C layout");
-    __intrinsic_asm "(__builtin_assume((reinterpret_cast<ulong>($0) & ($1 - 1)) == 0), $0)";
-}
 
 [[vk::binding(1)]] ConstantBuffer<uint64_t> gpu_texture_pool_base : register(b1);
 

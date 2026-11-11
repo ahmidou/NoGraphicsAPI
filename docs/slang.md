@@ -59,7 +59,8 @@ Metal 4 selects textures using `baseResourceID + index`.
 
 Roots share a constant-buffer layout on both targets:
 
-- Keep the root layout and total byte size 16-byte aligned. Each bound address must also meet the device's root alignment.
+- Align each root's GPU address to 16 bytes; it must also meet the device's root alignment. The total byte size needs
+  no padding: Metal reads the root in place, loading only the fields a shader uses.
 - Align 32-bit two-component vectors to eight bytes and four-component vectors to 16 bytes.
   Scalars and pointers use their natural alignment. Add explicit padding to the shared C++/Slang declaration.
 - Use `float4`/`uint4` instead of three-component root vectors. Inline row-major matrices have four columns
@@ -78,13 +79,13 @@ GPU_ROOT(ExampleRoot, root, 16);
 ```
 
 Declare a power of two supported by the actual address. The shared ABI guarantees at least 16 bytes.
-Metal applies `__builtin_assume` to the constant pointer. Vulkan's uniform-buffer binding is unchanged.
+Metal ignores it: the root is read in place, and binding asserts the address. Vulkan's uniform-buffer binding is unchanged.
 Neither backend allocates or copies root storage; all stages consume the application's GPU address directly.
 
 On macOS, `tools/check_root_layouts.py` scans `GPU_ROOT` declarations and checks every field, nested field,
 and array stride using compiled C++, SPIR-V reflection, and native Metal compiler assertions. Pass shader/header
 directories, `--include` paths, `--slang /path/to/slangc`, and `--output build/root-layouts`. Use this after editing roots;
-16-byte total size alone cannot detect incompatible field offsets.
+Matching total sizes alone cannot detect incompatible field offsets.
 
 Recompile Vulkan shaders when adopting this ABI: the push payload is now eight bytes, not the root
 structure itself. The binding uses `VK_DESCRIPTOR_MAPPING_SOURCE_PUSH_ADDRESS_EXT`; no buffer descriptor is allocated.
