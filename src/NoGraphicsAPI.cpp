@@ -1544,6 +1544,7 @@ struct QueriedFeatures
     VkPhysicalDeviceShaderUntypedPointersFeaturesKHR untyped_pointers{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_UNTYPED_POINTERS_FEATURES_KHR};
     VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unified_image_layouts{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFIED_IMAGE_LAYOUTS_FEATURES_KHR};
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
+    VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR fragment_shader_barycentric{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR};
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maintenance1{ .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR};
     VkPhysicalDevicePresentTimingFeaturesEXT present_timing{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_TIMING_FEATURES_EXT};
 
@@ -1565,7 +1566,8 @@ struct QueriedFeatures
             address_commands.pNext = &mesh_shader;
         }
         if (native_heap) untyped_pointers.pNext = descriptor_buffer.pNext;
-        mesh_shader.pNext = presentation ? &swapchain_maintenance1 : nullptr;
+        mesh_shader.pNext = &fragment_shader_barycentric;
+        fragment_shader_barycentric.pNext = presentation ? &swapchain_maintenance1 : nullptr;
         if (relative_present)
         {
             present_timing.pNext = mesh_shader.pNext;
@@ -1643,9 +1645,10 @@ Error inspect_candidate(VkPhysicalDevice physical_device, VkSurfaceKHR surface, 
                                  : "VK_EXT_descriptor_heap + VK_KHR_shader_untyped_pointers, or VK_EXT_descriptor_buffer");
     constexpr const char* required_extensions[]{
         VK_EXT_MESH_SHADER_EXTENSION_NAME,
+        VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
-    for (uint32 index = 0; index < (surface ? 2u : 1u); ++index)
+    for (uint32 index = 0; index < (surface ? 3u : 2u); ++index)
     {
         if (!has_name({extensions, extension_count}, required_extensions[index]))
             output.missing_extensions[output.missing_extension_count++] = required_extensions[index];
@@ -1705,6 +1708,8 @@ Error inspect_candidate(VkPhysicalDevice physical_device, VkSurfaceKHR surface, 
     struct RequiredFeature { VkBool32 available; const char* name; };
     const RequiredFeature required_features[]{
         {.available = features.core.features.shaderInt16, .name = "shaderInt16"},
+        {.available = features.core.features.shaderInt64, .name = "shaderInt64"},
+        {.available = features.core.features.geometryShader, .name = "geometryShader"},
         {.available = features.core.features.samplerAnisotropy, .name = "samplerAnisotropy"},
         {.available = features.core.features.depthBiasClamp, .name = "depthBiasClamp"},
         {.available = features.core.features.independentBlend, .name = "independentBlend"},
@@ -1731,6 +1736,7 @@ Error inspect_candidate(VkPhysicalDevice physical_device, VkSurfaceKHR surface, 
         {.available = native_heap ? VK_TRUE : features.vulkan12.shaderStorageImageArrayNonUniformIndexing, .name = "shaderStorageImageArrayNonUniformIndexing"},
         {.available = features.mesh_shader.meshShader, .name = "meshShader"},
         {.available = features.mesh_shader.taskShader, .name = "taskShader"},
+        {.available = features.fragment_shader_barycentric.fragmentShaderBarycentric, .name = "fragmentShaderBarycentric"},
     };
     for (const RequiredFeature& feature : required_features)
     {
@@ -2143,6 +2149,8 @@ DeviceInit create_device(const DeviceDesc& desc) noexcept
     enabled_features.core.features.imageCubeArray = selected.image_cube_array;
     enabled_features.core.features.samplerAnisotropy = VK_TRUE;
     enabled_features.core.features.shaderInt16 = VK_TRUE;
+    enabled_features.core.features.shaderInt64 = VK_TRUE;
+    enabled_features.core.features.geometryShader = VK_TRUE;
     enabled_features.core.features.depthBiasClamp = VK_TRUE;
     enabled_features.core.features.independentBlend = VK_TRUE;
     enabled_features.core.features.textureCompressionBC = selected.texture_compression_bc;
@@ -2176,6 +2184,7 @@ DeviceInit create_device(const DeviceDesc& desc) noexcept
     enabled_features.unified_image_layouts.unifiedImageLayouts = selected.unified_image_layouts ? VK_TRUE : VK_FALSE;
     enabled_features.mesh_shader.taskShader = VK_TRUE;
     enabled_features.mesh_shader.meshShader = VK_TRUE;
+    enabled_features.fragment_shader_barycentric.fragmentShaderBarycentric = VK_TRUE;
     enabled_features.swapchain_maintenance1.swapchainMaintenance1 = VK_TRUE;
 
     const uint32 requested_counts[]{desc.desired_queue_count, desc.desired_compute_queue_count, desc.desired_copy_queue_count};
@@ -2203,7 +2212,7 @@ DeviceInit create_device(const DeviceDesc& desc) noexcept
         };
         first_queue += queue_counts[type];
     }
-    const char* enabled_device_extensions[10]{};
+    const char* enabled_device_extensions[11]{};
     uint32 enabled_device_extension_count = 0;
     enabled_device_extensions[enabled_device_extension_count++] = state->descriptor_heap
         ? VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME : VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME;
@@ -2214,6 +2223,7 @@ DeviceInit create_device(const DeviceDesc& desc) noexcept
         enabled_device_extensions[enabled_device_extension_count++] = VK_KHR_UNIFIED_IMAGE_LAYOUTS_EXTENSION_NAME;
     }
     enabled_device_extensions[enabled_device_extension_count++] = VK_EXT_MESH_SHADER_EXTENSION_NAME;
+    enabled_device_extensions[enabled_device_extension_count++] = VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME;
 #if defined(_WIN32)
     if (presentation)
     {
